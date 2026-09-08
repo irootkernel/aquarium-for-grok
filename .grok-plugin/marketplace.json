@@ -1,0 +1,17 @@
+{
+  "name": "aquarium-for-grok",
+  "description": "Aquarium development skills for Grok, generated from the Codex plugin at irootkernel/aquarium.",
+  "owner": {
+    "name": "Root Kernel",
+    "email": "cs@rootkernel.xyz",
+    "url": "https://home.rootkernel.xyz"
+  },
+  "plugins": [
+    {
+      "name": "aquarium",
+      "source": "./plugins/aquarium",
+      "description": "AI Fleet engineering workflows for governed design, documentation, delivery, review, validation, testing, and release lifecycle management.",
+      "category": "development"
+    }
+  ]
+}

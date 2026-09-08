@@ -1,0 +1,17 @@
+{
+  "description": "Route direct roadmap-repository commits through Aquarium task-commit.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|run_terminal_command|run_terminal_cmd)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${GROK_PLUGIN_ROOT}/hooks/task_commit_gate.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

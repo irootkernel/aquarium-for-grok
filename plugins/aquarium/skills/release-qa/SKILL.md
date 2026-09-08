@@ -1,0 +1,161 @@
+---
+name: release-qa
+description: "Run one full scenario-based QA pass for an exact main release candidate, or one bounded confirmation pass after remediated findings. Use when the user explicitly invokes /aquarium:release-qa or /aquarium:release-handler delegates one intended version and candidate."
+argument-hint: "[version]"
+disable-model-invocation: true
+---
+
+# Release QA
+
+Assess one exact committed `main` candidate in either `full` or `confirmation` mode. A first pass is always `full` and uses two independent matrices: every active Design Gate and every material release-delta change. A later pass may use `confirmation` only under the bounded contract below.
+
+Always read [evidence-residency.md](../../references/evidence-residency.md) and [release-notes.md](../../references/release-notes.md). Treat existing automated checks as already successful and mutate only disposable fixtures under `/tmp` during the QA pass. Every `/tmp` path and worker identity remains local orchestration evidence and never enters tracked documentation. One invocation owns exactly one QA pass and, when a full pass has verified findings, at most one bounded remediation phase. It never starts a second QA pass by itself.
+
+Explicit invocation by the user, or an exact candidate handoff from an explicitly invoked `/aquarium:release-handler`, authorizes read-only release discovery against the configured Git remote and hosting Releases, including use by those clients of already-configured ambient authentication without exposing credential material.
+
+It also authorizes creation and mutation of bounded `/tmp` fixtures, fresh subagents for local QA, and the smallest local source, test, or documentation remediation directly required by verified findings after the QA pass completes. Run only focused checks needed to verify that remediation; the repository release policy remains authoritative for any later full gate.
+
+It does not authorize staging, commits, pushes, tags, releases, networked or live product scenarios, credential inspection or changes, new authentication, global installation or configuration, persistent daemons, or a second QA pass. Preserve unrelated work. Stop before remediation when a finding needs a material product choice, authority expansion, or unrelated refactor, and report that decision instead.
+
+## Establish the Release Contract
+
+1. Resolve the Git root and read all applicable instructions and release policy. Inspect the worktree, conflicts, current branch, `HEAD`, local `main`, configured upstream branch, live remote `main`, existing tags, and configured hosting Releases. Record the exact candidate SHA.
+2. Require a clean worktree, `HEAD` equal to local `main`, and one unambiguous configured upstream that identifies the publication remote's `main` branch. Query live remote `main`; do not use the cached upstream-tracking SHA as candidate identity. Permit the candidate when live remote `main` equals the candidate or is a verified ancestor of it, and record the remote SHA and relationship without pushing.
+   - Return `INCOMPLETE` when remote access fails, remote `main` is absent, its object or ancestry cannot be established without fetching, the candidate is behind remote `main`, or the refs have diverged. Never fetch, merge, switch branches, stash, or clean to repair the state.
+   - Permit the configured Git and hosting clients to use existing ambient authentication for private repositories, but never inspect, read, copy, print, persist, refresh, or reconfigure credential material and never initiate an authentication flow.
+   - Treat read-only remote and hosting metadata lookup needed to establish those facts as explicitly authorized release discovery, not scenario authorization. A locally ahead candidate remains unpublished release state, not an evidence gap.
+3. Accept an intended release version supplied by the user. Otherwise follow repository version policy; when none exists, propose the next patch after the latest stable release and obtain confirmation before QA. Treat the intended version as the prospective release identifier, not as a required value in candidate files. Do not edit version metadata.
+   - Proceed whether committed version metadata still names the previous release or already names the intended version. Neither state is an `INCOMPLETE` condition or finding by itself.
+   - When the candidate already contains the intended version, include that version change in the release delta and inspect its manifest, documentation, and pinned-validation consistency.
+   - Do not run tag-time validators or require target-version metadata merely to establish the QA candidate. A dirty worktree still prevents an exact committed candidate under step 2, regardless of which files are dirty.
+4. Resolve the previous release from the latest non-draft, non-prerelease published Release reachable from the candidate, or from an exact tag explicitly confirmed by the user. Stop on conflicting tags or Releases, an existing target-version tag or Release, or a baseline not contained in the candidate.
+5. When no release tag exists, ask whether this is the first release and confirm its intended version. After confirmation, use the full reachable history and current public surface as new-release scope, with no regression baseline. Without confirmation return `INCOMPLETE`.
+6. Define the delta solely from Git history as every commit after the previous release through the candidate, independent of the version currently recorded in candidate files. For example, with previous release `v0.2.3`, ten later candidate commits, and intended version `v0.2.4`, cover all ten commits whether the files still say `v0.2.3` or already say `v0.2.4`. When that range is empty, report that there is no release delta and return `INCOMPLETE` rather than `PASS`.
+7. When Project Configuration declares `Aquarium release notes: <repository-relative-path>`, require one regular non-symlink tracked Markdown authority with exactly one open section matching the intended version. Require a completed section for the previous release only when step 4 established one; a confirmed first release instead requires no completed release section and invokes the release-handler inspector with `--first-release`.
+   - Run the inspector when available and treat its JSON as structural evidence only. A missing, unsafe, ambiguous, or structurally invalid enrolled authority makes the result `INCOMPLETE`; semantic omissions or incorrect shipped claims are findings.
+
+The previous release is assumed to work. Inspect its committed code, documentation, and tests only to reconstruct established behavior; do not check it out or execute it.
+
+## Select Full or Confirmation Mode
+
+Use `full` mode unless the enclosing release workflow supplies a confirmation manifest under `/tmp` that records all of the following exact facts:
+
+- the intended version, previous release, current candidate SHA, and previous full-pass candidate SHA;
+- the retained previous evidence root and the non-empty remediation commit range ending at the current candidate;
+- the frozen cluster and scenario matrix from the previous full pass, including every stable cluster and scenario identifier, its Design Gate or release-delta source, command or inspection procedure, controlled environment, expected and previous observed outcomes, and retained evidence location;
+- every verified finding reproduction scenario, every source surface changed by remediation, and the mapping from each changed surface to one or more retained scenarios or finding reproductions;
+- `confirmation_attempt: 1`, with evidence that no earlier confirmation pass was started for this full-pass candidate and remediation range.
+
+Before accepting `confirmation`, reconcile the manifest's complete frozen inventory against the authoritative full-pass confirmation record retained beneath the previous evidence root. Require the exact same set of cluster and scenario identifiers, cluster assignments, sources, procedures, controlled environments, expected and previous observed outcomes, and retained evidence locations.
+
+A missing, extra, reassigned, or altered entry makes the result `INCOMPLETE`; never accept a manifest reconstructed from only the remediation diff, findings, or selected scenarios.
+
+Reject `confirmation` as `INCOMPLETE` if that exact reconciliation, the manifest, retained evidence, exact Git objects, ancestry, remediation range, or one-attempt fact cannot be established. The confirmation candidate must still satisfy the clean and unambiguous committed-`main` rules above. A confirmation manifest is disposable workflow evidence, never repository authority; do not copy its date, intermediate candidate SHA, or evidence path into repository documentation.
+
+In `full` mode, follow every section below and explore the complete Design Gate and release-delta matrices. In `confirmation` mode, do not rebuild or broaden those matrices. Preserve the project-derived cluster boundaries and scenario inventory from the frozen previous full-pass matrix, and dispatch fresh workers for every retained cluster.
+
+Do not admit confirmation from prose or a hand-copied manifest. Resolve this skill's directory and run `scripts/manage_release_qa.py begin-confirmation --input <begin.json>` before dispatch. The helper validates the canonical record and manifest, Git ancestry, exact clean local-main candidate, physical evidence roots, and atomically claims the sole attempt. Any nonzero result is `INCOMPLETE` and starts no worker.
+
+For each cluster, rerun every retained scenario and every verified finding reproduction. Require every remediation-changed surface to map to at least one retained scenario or finding reproduction, and return `INCOMPLETE` when that mapping or its evidence is missing because confirmation cannot add new coverage.
+
+Existing tests and validators remain prohibited as QA scenario evidence. Capture the same command, controlled environment, outcome, resulting files, worker identity, and source-repository status required for a full pass, but write all new evidence beneath a fresh confirmation evidence root.
+
+Confirmation is a fixed verification pass, not a new edge-case search. Do not invent additional inputs, variants, paths, or scenarios beyond the frozen matrix and verified finding reproductions. Do not turn a limitation that the candidate publicly documents and the previous full pass accepted into a release blocker. A directly observed failure of a retained scenario remains a finding; this restriction only forbids expanding the scenario inventory.
+
+Confirmation may run exactly once after one full pass and its bounded remediation. It returns `PASS` only when every retained scenario succeeds and no evidence gap remains. On `FINDINGS` or `INCOMPLETE`, stop the release without remediation, another confirmation, or another automatic full pass.
+
+Route any additional same-family hardening or newly discovered edge case to a separately authorized change, or require an explicit user risk-acceptance decision outside release QA. A confirmation `PASS` ends release QA for that candidate; do not run another release-qa pass before the already-authorized release gate.
+
+## Establish Design Gate Enrollment
+
+Read [design-gates.md](../../references/design-gates.md). Resolve the authoritative current and retired registry paths from repository authority, using `docs/gating-rules.md` and `docs/gating-rules-retired.md` only as defaults, and determine enrollment from candidate history, not only the current tree.
+
+- If no Design Gate registry has ever existed in reachable history, run the release-delta matrix alone and report `Design Gate not enrolled`. This gradual opt-in is not a finding and does not block `PASS` when delta coverage is otherwise complete.
+- If a registry existed in history but the candidate is missing its authoritative current path, record a contract finding. Never reinterpret deletion as opt-out.
+- When the registry exists, parse every active gate and require its stable ID, concise title, invariant, scope, positive and failure scenario, local offline source-read-only procedure, declared disposable outputs, objective pass condition, revalidation triggers, sources, and owner. A malformed active entry is a contract finding; an unexecutable required gate or missing evidence makes the result `INCOMPLETE`.
+- Exercise every active gate against the exact candidate, including gates unchanged in the release delta, under the disposable-project isolation regime below. Redirect its declared outputs and caches into the evidence root, compare source-repository status before and after each gate, and stop with `INCOMPLETE` on mutation. Keep its command, controlled environment, positive and failure outcomes, pass condition, and evidence path in an active Design Gate matrix. A verified active-gate failure is a finding.
+
+Gate additions, changes, reactivations, retirements, current tombstones, and retired-registry changes also belong to the release-delta matrix. Confirm that every retirement leaves a current tombstone in the resolved current registry and preserves the full retired body and rationale in the resolved retired registry. Confirm that every reactivation restores the same ID as one active current body, removes its current tombstone, retains retired history, and appends a reactivation record.
+
+Do not invoke providers or network services for a gate. A gate that requires either violates the Design Gate contract and cannot supply executable release evidence.
+
+## Build the Release Delta Matrix
+
+Read the commit list, complete diff, current public documentation, changed skills and instructions, runtime entrypoints, and relevant existing tests. Do not treat commit subjects as sufficient evidence.
+
+Map every commit and material changed surface to one or more release-delta scenarios:
+
+- an existing-behavior regression scenario derived from the previous release contract;
+- a new-behavior success and failure scenario derived from the candidate contract;
+- a changed-skill representative, boundary, or misuse prompt;
+- a documentation, example, link, installation, or cross-file consistency inspection.
+
+Give every user-visible or operationally risky change at least one executable scenario. Static inspection is sufficient only when the changed contract has no executable behavior. Record exclusions with exact evidence instead of silently sampling them away.
+
+When release notes are enrolled, map every changelog entry to the exact delta surface it describes and every material user-visible, compatibility, security, privacy, or operational delta to one concise entry. Confirm that intentional omissions are actually internal-only, completed release text is unchanged, and the open section contains no claim outside the candidate delta.
+
+Do not edit the changelog during QA. A substantive note edit after `PASS` creates a new candidate; only the enclosing release workflow may later change the open heading to the publication date without changing entry bytes.
+
+Do not run existing automated tests, `make test`, test runners, test scripts, linters, formatters, validators, generators, snapshot updates, CI commands, Gaori, Mulgae, or provider reviews as release-delta scenarios. Existing tests may be read as specifications, but their presence or prior success does not prove the release scenarios. The sole exception is an exact local offline procedure registered by an active Design Gate; execute it only in the Design Gate matrix and do not count the same run as release-delta scenario coverage.
+
+## Exercise Disposable Projects
+
+1. Create one evidence root with `mktemp -d /tmp/release-qa.XXXXXX`, immediately resolve that directory with `pwd -P`, and use only the resulting physical absolute path for fixtures and candidate commands. Create a separate fixture directory for each scenario, record the physical root, and retain it for user inspection.
+2. Use the current repository's candidate binaries, source entrypoints, scripts, skills, documentation, and other resources by exact path. Do not clone or execute the previous release. Keep the source repository read-only and confirm its Git status is unchanged after every scenario group.
+3. Redirect `HOME`, XDG directories, temporary state, build outputs, and language or tool caches into the evidence root wherever applicable. Never write user-global state or rely on ambient credentials.
+4. Prefer an existing candidate artifact. When execution requires a build, run only the smallest non-test build whose outputs and caches can be isolated under `/tmp`; do not permit network access or global installation. Record an evidence gap when a safe isolated build is impossible.
+5. Keep scenarios offline and local by default. Do not contact live services, authenticate, start a persistent daemon, or send repository content externally. Record the blocked scenario as an evidence gap unless the user separately authorizes the exact external action.
+6. Capture the command, working directory, controlled environment, exit status, output, and material resulting files. Stop local background processes before completing the scenario.
+
+## Dispatch Fresh Scenario Agents
+
+Use `spawn_subagent` to dispatch fresh subagents for independent risk clusters. Give each worker only the exact candidate paths, raw baseline contract and delta relevant to its cluster, assigned `/tmp` fixture, and scenario objective. Do not disclose suspected findings, expected defects, intended fixes, or another worker's output.
+
+Require every worker to avoid existing test commands, source-repository writes, network access, credentials, global state, remediation, release-readiness decisions, and next-action recommendations. A worker may mutate only its assigned fixture and must return commands, observations, evidence paths, and source-repository status; the coordinator alone assigns final severity and status.
+
+Each worker must also write one bounded `aquarium-release-qa-cluster-result/v1` JSON file beneath its assigned physical evidence root. It records the exact candidate, stable cluster ID, source status before and after, and every stable scenario ID with sources, procedure, controlled environment, expected and observed outcomes, `pass`, `finding`, or `gap`, regular non-symlink evidence files, and verified finding identities. Cluster and scenario IDs are globally unique for the pass.
+
+Do not replace an unavailable, failed, or timed-out fresh worker with coordinator execution or static review. Mark its required coverage as missing and return `INCOMPLETE`. Parallelize independent clusters by launching their workers in a single message with `background: true` when capacity allows, without weakening isolation, and collect each result through `get_command_or_subagent_output`.
+
+Adjudicate every worker report against the release contract and candidate. Reproduce a suspected defect in a clean sibling fixture or confirm it directly from deterministic evidence before accepting it. Put unreproduced, environment-dependent, or authority-dependent claims under evidence gaps, not findings.
+
+## Report and Enforce the Convergence Boundary
+
+Choose one overall result in this order across both matrices:
+
+1. `INCOMPLETE` when any required release fact, active-gate execution or evidence, delta scenario, fresh-worker result, or safe execution prerequisite is missing, even when verified findings also exist.
+2. `FINDINGS` when both applicable matrices are complete and at least one verified active-gate or release-delta defect remains.
+3. `PASS` only when the active Design Gate matrix, when enrolled, and the release-delta matrix are both complete and no verified defect remains.
+
+In `full` mode, store beneath the retained evidence root and return an authoritative frozen confirmation record containing the exact cluster decomposition and every stable cluster and scenario identifier, source matrix, procedure, controlled environment, expected and observed outcomes, and retained evidence location. This record, not a later reconstruction, is the inventory authority for any permitted confirmation pass.
+
+Before reporting the full verdict or applying remediation, run `scripts/manage_release_qa.py freeze-full --input <full-pass.json> --output <evidence-root>/confirmation-record.json`. The input supplies every worker result, the exact ordered commit matrix, every changed-path surface mapping, and Design Gate state.
+
+A nonzero result makes the pass `INCOMPLETE`; never reconstruct the record after remediation. The helper computes `INCOMPLETE` before `FINDINGS` before `PASS`, writes the canonical `aquarium-release-qa-confirmation-record/v1` atomically with private permissions, and freezes even a complete `FINDINGS` pass.
+
+After an admitted confirmation finishes, run `scripts/manage_release_qa.py finish-confirmation --input <finish.json> --output <confirmation-root>/confirmation-result.json`. It requires every retained cluster and scenario exactly once with no extras, all finding reproductions, fresh in-root evidence, the unchanged clean candidate, and the matching attempt claim. Its `aquarium-release-qa-confirmation-result/v1` verdict is authoritative; a nonzero result or any missing evidence is `INCOMPLETE`.
+
+Return the intended version, previous release or confirmed first-release state, candidate SHA, commit range, Design Gate enrollment state, active-gate matrix, commit-to-scenario release-delta matrix, authoritative frozen confirmation record, scenario commands and outcomes, source-repository status, retained `/tmp` evidence root, verified findings, and evidence gaps.
+
+Classify verified findings as:
+
+- **Critical**: security, privacy, data loss, or broadly destructive behavior;
+- **High**: a core regression or promised new capability that is unusable;
+- **Medium**: a bounded functional, skill, or documentation defect with material user impact;
+- **Low**: a reproducible non-cosmetic inconsistency or minor usability defect.
+
+For each finding give the violated baseline or candidate contract, reproduction steps, expected and actual behavior, impact, exact source and evidence locations, and confidence. Exclude style preferences, praise, speculative risks, duplicate symptoms, and claims the coordinator could not verify.
+
+When the result is `PASS`, return the evidence and allow an already-authorized enclosing release workflow to continue its normal release procedure without another QA confirmation. `PASS` does not itself authorize staging, commits, pushes, tags, or publication.
+
+When a full-mode result is `FINDINGS`, complete the current QA report first, then leave QA mode and implement only the smallest safe fixes for the verified findings. Add or adjust focused regression coverage when the finding is executable, run only the focused checks needed to verify the edits, and preserve unrelated work. Do not broaden remediation into general hardening, accept speculative edge cases as new scope, update evidence documents merely to bind an intermediate candidate SHA, stage, commit, push, or start another QA pass.
+
+A confirmation-mode result never authorizes remediation; apply the stop and escalation rule in the confirmation contract instead.
+
+After remediation, report the findings, why each required correction, the exact files changed, focused checks and outcomes, remaining uncertainty, and current Git state. Then stop and ask for explicit user confirmation before preparing a new committed candidate or running release QA again. The original release request, prior confirmation, silence, or a successful focused check is not confirmation for another QA pass.
+
+When the result is `INCOMPLETE`, report the missing prerequisite or evidence and stop. Do not reinterpret incomplete coverage as a finding-remediation cycle and do not retry automatically.
+
+After the user explicitly confirms the one bounded confirmation review, prepare a clean exact candidate only through the enclosing repository workflow and begin one new release-qa invocation with the required confirmation manifest. Do not substitute another full pass or a looser delta review. If confirmation does not pass, stop under its escalation rule; never enter an automatic review-remediation loop.
+
+Version metadata may be committed before or after a passing QA run; its timing never narrows the original full-pass delta or substitutes for scenario evidence.

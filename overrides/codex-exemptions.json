@@ -1,0 +1,14 @@
+{
+  "skills/aquarium-dev/SKILL.md": {
+    "source": "fd7c8b0572d23c844e3dcaaa4edb8da39d7d4f284a807392d3a804716ee28419",
+    "shipped": "563af3976124832a0606b295c94754aa8cd22928f229cd4504334b3924ec57e4"
+  },
+  "skills/aquarium-dev/references/development-contract.md": {
+    "source": "f038da75f773415250f2a56d3fd2f0369bbb82b2eec0c5496bd44feafb858f6b",
+    "shipped": "ce38bed06f4319d7c56aad89d9e151a34c7aaef081d9b9350752f2c2dcf6fb37"
+  },
+  "skills/dev-setup/references/tool-catalog.md": {
+    "source": "8e736eb57cc943563a2ac99c3cbf0d6ce9628ceb92eaf2e6ecc4d34a14c02dd0",
+    "shipped": "5c78370a2a09c144243ca875179a3a614e89b3922b690742bfa5072d242e0e2b"
+  }
+}

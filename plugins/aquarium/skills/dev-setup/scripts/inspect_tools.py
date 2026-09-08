@@ -1,0 +1,2939 @@
+#!/usr/bin/env python3
+"""Inspect local Aquarium development-tool state without mutating it."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+SCHEMA_VERSION = "aquarium-dev-setup-inspection.v14"
+MULGAE_COMMAND_RESULT_SCHEMA = "mulgae-command-result.v5"
+MULGAE_DOCTOR_RESULT_SCHEMA = "mulgae-doctor-result.v2"
+MULGAE_MCP_TOOL_TIMEOUT_SEC = 7501
+GAORI_MCP_TOOL_TIMEOUT_SEC = 3601
+MAX_COMMAND_TIMEOUT_SECONDS = 86_400.0
+CONFLICT_STATUSES = {"DD", "AU", "UD", "UA", "DU", "AA", "UU"}
+CANONICAL_NUMERIC_COMPONENT = r"(?:0|[1-9][0-9]*)"
+CANONICAL_SEMVER = re.compile(
+    rf"v?{CANONICAL_NUMERIC_COMPONENT}\."
+    rf"{CANONICAL_NUMERIC_COMPONENT}\."
+    rf"{CANONICAL_NUMERIC_COMPONENT}(?:[-+][0-9A-Za-z.-]+)?"
+)
+SANHO_SKILL_FILES = (
+    "SKILL.md",
+    "references/lifecycle.md",
+    "references/authoring.md",
+    "references/recovery.md",
+)
+GAORI_SKILL_FILES = (
+    "SKILL.md",
+    "references/lifecycle.md",
+    "references/authoring.md",
+    "references/recovery.md",
+)
+MULGAE_SKILL_FILES = (
+    "SKILL.md",
+    "references/lifecycle.md",
+    "references/authoring.md",
+    "references/recovery.md",
+)
+PODWAY_SKILL_FILES = (
+    "SKILL.md",
+    "references/lifecycle.md",
+    "references/goal.md",
+    "references/recovery.md",
+)
+HUMANIZER_SKILL_FILES = (
+    "SKILL.md",
+    "LICENSE",
+)
+HUMANIZER_SUPPORTED_RELEASE = "v2.11.1"
+HUMANIZE_KOREAN_SKILL_FILES = (
+    "SKILL.md",
+    "LICENSE",
+    "references/ai-tell-taxonomy.md",
+    "references/baseline.json",
+    "references/baseline_v2.json",
+    "references/design-notes.md",
+    "references/diagnosis-rules.md",
+    "references/empirical-validation.md",
+    "references/metrics.py",
+    "references/metrics_v2.py",
+    "references/quick-rules.footer.md",
+    "references/quick-rules.header.md",
+    "references/quick-rules.md",
+    "references/rewriting-playbook.md",
+    "references/scholarship.md",
+    "references/web-service-spec.md",
+)
+IM_NOT_AI_SUPPORTED_RELEASE = "v2.3.2"
+PODWAY_PROCEDURES = (
+    "aquarium-task-v2.yaml",
+    "aquarium-goal-v2.yaml",
+    "aquarium-validation-v2.yaml",
+    "aquarium-design-v2.yaml",
+    "aquarium-war-room-v2.yaml",
+)
+PODWAY_PRIOR_CANONICAL_SHA256 = {
+    "aquarium-task-v2.yaml": {
+        "6bb336f321a83bba429c4173942eb977000014c627245839b3434da7d1055602",
+        "c666f17cf41e8a9403f610f89b0b7397352d8ac6e2e5e05e1c268fc0e6ece3d9",
+        "0ae730df9ca5854ff61b02679e3ac58aa4508ee35c5a09ba76c35e7d0ef3d45d",
+        "b703da6c798801a396d144be1c9c71e0fdb05c95e9e293386bf83c0d238ef927",
+    },
+    "aquarium-goal-v2.yaml": {
+        "7bf4460688335c1d1985fc1171313ac42ba7f82a64d8bc8733826a4fdd116e38",
+        "90411e16758cb79a01294e008d9a091a52b341fc1e9bb968ce9521fed2910ec3",
+        "8ca12a8ba36e9dd035bc70c903b8a5a0a9e4fd6db00cf75e2448f66082ab6ac6",
+    },
+    "aquarium-validation-v2.yaml": {
+        "bc454955ef56d9607a9128a085177eb8557f8b24774cba59ddca3c0db88428e8",
+        "45192a644087b811eb34952576798ae4f3e85ebdf87c77fc8dc097d3c8bb2f50",
+    },
+    "aquarium-design-v2.yaml": {
+        "4ec653b2b4d740d77bcd4826f40288d9fadd7d696a3939c197b9789dbba824b6"
+    },
+    "aquarium-war-room-v2.yaml": {
+        "ca9f2363107b315e829ba9f0357d35cbc242d07fbbf5a4702868bbb781dee1cb"
+    },
+}
+LEGACY_PODWAY_PROCEDURES = (
+    "root-kernel-task-v2.yaml",
+    "root-kernel-goal-v2.yaml",
+    "root-kernel-validation-v2.yaml",
+)
+PODWAY_SOURCE_DIRECTORY = (
+    Path(__file__).resolve().parents[3] / "assets" / "podway" / "procedures"
+)
+OUROBOROS_UVX_MCP_ARGS = (
+    "--isolated",
+    "--python",
+    ">=3.12",
+    "--from",
+    "ouroboros-ai[mcp]",
+    "ouroboros",
+    "mcp",
+    "serve",
+)
+OUROBOROS_MCP_PACKAGE = re.compile(
+    rf"ouroboros-ai\[mcp\](?:==(0\.51\.{CANONICAL_NUMERIC_COMPONENT}))?"
+)
+
+
+class InspectionError(Exception):
+    def __init__(self, code: str, message: str, exit_code: int = 2) -> None:
+        super().__init__(message)
+        self.code = code
+        self.exit_code = exit_code
+
+
+class JsonArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        raise InspectionError("invalid_arguments", "invalid command-line arguments")
+
+
+def strict_json_loads(content: str) -> Any:
+    def object_from_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+        return result
+
+    def reject_constant(_value: str) -> None:
+        raise ValueError("invalid JSON constant")
+
+    def finite_float(value: str) -> float:
+        parsed = float(value)
+        if not math.isfinite(parsed):
+            raise ValueError("non-finite JSON number")
+        return parsed
+
+    return json.loads(
+        content,
+        object_pairs_hook=object_from_pairs,
+        parse_constant=reject_constant,
+        parse_float=finite_float,
+    )
+
+
+def finite_number(value: Any) -> bool:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def run_command(
+    arguments: list[str],
+    cwd: Path,
+    timeout_seconds: float,
+    environment_overrides: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    environment = os.environ.copy()
+    for name in tuple(environment):
+        if name.startswith("GIT_"):
+            del environment[name]
+    environment["GIT_CONFIG_GLOBAL"] = os.devnull
+    environment["GIT_CONFIG_NOSYSTEM"] = "1"
+    environment["GIT_OPTIONAL_LOCKS"] = "0"
+    environment["LANG"] = "C"
+    environment["LC_ALL"] = "C"
+    if environment_overrides:
+        environment.update(environment_overrides)
+    try:
+        completed = subprocess.run(
+            arguments,
+            cwd=cwd,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "attempted": True,
+            "ok": False,
+            "exit_code": None,
+            "timed_out": True,
+            "stdout": "",
+            "stderr": "",
+        }
+    except OSError as error:
+        return {
+            "attempted": True,
+            "ok": False,
+            "exit_code": None,
+            "timed_out": False,
+            "stdout": "",
+            "stderr": "",
+            "error_code": "execution_failed",
+            "error_type": type(error).__name__,
+        }
+    return {
+        "attempted": True,
+        "ok": completed.returncode == 0,
+        "exit_code": completed.returncode,
+        "timed_out": False,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+    }
+
+
+def skipped_probe(reason: str) -> dict[str, Any]:
+    return {
+        "attempted": False,
+        "ok": False,
+        "exit_code": None,
+        "timed_out": False,
+        "reason": reason,
+    }
+
+
+def parse_json_probe(raw_probe: dict[str, Any]) -> dict[str, Any]:
+    probe = {
+        key: raw_probe[key] for key in ("attempted", "ok", "exit_code", "timed_out")
+    }
+    if raw_probe.get("error_code"):
+        probe["error_code"] = raw_probe["error_code"]
+        return probe
+    if not raw_probe["attempted"] or raw_probe["timed_out"]:
+        return probe
+    try:
+        probe["result"] = strict_json_loads(raw_probe["stdout"])
+    except (json.JSONDecodeError, ValueError):
+        probe["ok"] = False
+        probe["error_code"] = "invalid_json"
+    return probe
+
+
+def json_probe(
+    arguments: list[str],
+    repository: Path,
+    timeout_seconds: float,
+    environment_overrides: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    if environment_overrides is None:
+        return parse_json_probe(run_command(arguments, repository, timeout_seconds))
+    return parse_json_probe(
+        run_command(
+            arguments,
+            repository,
+            timeout_seconds,
+            environment_overrides,
+        )
+    )
+
+
+def version_from_probe(probe: dict[str, Any]) -> str | None:
+    result = probe.get("result")
+    version = result.get("version") if isinstance(result, dict) else None
+    if isinstance(version, str) and CANONICAL_SEMVER.fullmatch(version):
+        return version
+    return None
+
+
+def normalized_version(version: str | None) -> str | None:
+    if not version:
+        return None
+    return version.removeprefix("v")
+
+
+def supported_podway_version(version: str | None) -> bool:
+    if not version:
+        return False
+    match = re.fullmatch(rf"v?0\.2\.({CANONICAL_NUMERIC_COMPONENT})", version)
+    return bool(match and int(match.group(1)) >= 8)
+
+
+def podway_v025_workaround_bytes(name: str, source: bytes) -> bytes | None:
+    if name == "aquarium-goal-v2.yaml":
+        declaration = b"        max_total_length: 1000000\n"
+        if source.count(declaration) != 1:
+            return None
+        return source.replace(declaration, b"", 1)
+    if name in {"aquarium-task-v2.yaml", "aquarium-validation-v2.yaml"}:
+        declaration = (
+            b"        max_item_length: 1200\n        max_total_length: 1000000\n"
+        )
+        if source.count(declaration) != 1:
+            return None
+        return source.replace(declaration, b"        max_item_length: 1000\n", 1)
+    return None
+
+
+def supported_sanho_version(version: str | None) -> bool:
+    if not version:
+        return False
+    match = re.fullmatch(rf"v?0\.2\.({CANONICAL_NUMERIC_COMPONENT})", version)
+    return bool(match and int(match.group(1)) >= 7)
+
+
+def supported_gaori_version(version: str | None) -> bool:
+    if not version:
+        return False
+    match = re.fullmatch(rf"v?0\.1\.({CANONICAL_NUMERIC_COMPONENT})", version)
+    return bool(match and int(match.group(1)) >= 14)
+
+
+def supported_mulgae_version(version: str | None) -> bool:
+    if not version:
+        return False
+    match = re.fullmatch(rf"v?0\.1\.({CANONICAL_NUMERIC_COMPONENT})", version)
+    return bool(match and int(match.group(1)) >= 18)
+
+
+def supported_mulgae_go_version(version: str | None) -> bool:
+    if not version:
+        return False
+    match = re.fullmatch(
+        rf"go({CANONICAL_NUMERIC_COMPONENT})\."
+        rf"({CANONICAL_NUMERIC_COMPONENT})\."
+        rf"({CANONICAL_NUMERIC_COMPONENT})",
+        version,
+    )
+    return bool(match and tuple(map(int, match.groups())) >= (1, 26, 6))
+
+
+def supported_ouroboros_version(version: str | None) -> bool:
+    if not version:
+        return False
+    match = re.fullmatch(rf"v?0\.51\.({CANONICAL_NUMERIC_COMPONENT})", version)
+    return bool(match and int(match.group(1)) >= 1)
+
+
+def ouroboros_version_from_output(output: str) -> str | None:
+    plain = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", output)
+    match = re.search(
+        r"\bOuroboros\b.*?\bversion\s+v?(\d+\.\d+\.\d+)\b",
+        plain,
+        re.IGNORECASE | re.DOTALL,
+    )
+    return match.group(1) if match else None
+
+
+def file_sha256(path: Path) -> str | None:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def file_bytes(path: Path) -> bytes | None:
+    try:
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+def git_output(repository: Path, timeout_seconds: float, *arguments: str) -> str | None:
+    probe = run_command(["git", *arguments], repository, timeout_seconds)
+    if not probe["ok"]:
+        return None
+    return probe["stdout"].strip()
+
+
+def resolve_repository(requested_path: str, timeout_seconds: float) -> Path:
+    candidate = Path(requested_path).expanduser().resolve()
+    if not candidate.is_dir():
+        raise InspectionError(
+            "invalid_repository_path", "repository path must be an existing directory"
+        )
+    root = git_output(candidate, timeout_seconds, "rev-parse", "--show-toplevel")
+    if not root:
+        raise InspectionError(
+            "not_a_git_repository", "repository path is not inside a Git worktree"
+        )
+    return Path(root).resolve()
+
+
+def worktree_counts(repository: Path, timeout_seconds: float) -> dict[str, int]:
+    probe = run_command(
+        ["git", "status", "--porcelain=v1", "-z"], repository, timeout_seconds
+    )
+    if not probe["ok"]:
+        raise InspectionError("git_status_failed", "unable to inspect Git worktree", 1)
+    entries = probe["stdout"].split("\0")
+    counts = {"staged": 0, "unstaged": 0, "untracked": 0, "conflicted": 0}
+    index = 0
+    while index < len(entries):
+        entry = entries[index]
+        index += 1
+        if not entry:
+            continue
+        status = entry[:2]
+        if status == "??":
+            counts["untracked"] += 1
+            continue
+        if status in CONFLICT_STATUSES:
+            counts["conflicted"] += 1
+        else:
+            if status[0] != " ":
+                counts["staged"] += 1
+            if status[1] != " ":
+                counts["unstaged"] += 1
+        if "R" in status or "C" in status:
+            index += 1
+    return counts
+
+
+def repository_inventory(repository: Path, timeout_seconds: float) -> dict[str, Any]:
+    branch = git_output(
+        repository, timeout_seconds, "symbolic-ref", "--quiet", "--short", "HEAD"
+    )
+    if branch is None:
+        branch = git_output(repository, timeout_seconds, "rev-parse", "--short", "HEAD")
+    upstream = git_output(
+        repository,
+        timeout_seconds,
+        "rev-parse",
+        "--abbrev-ref",
+        "--symbolic-full-name",
+        "@{upstream}",
+    )
+    return {
+        "root": str(repository),
+        "branch": branch,
+        "upstream": upstream,
+        "worktree": worktree_counts(repository, timeout_seconds),
+    }
+
+
+def ignored_by_git(
+    repository: Path, relative_path: str, timeout_seconds: float
+) -> bool:
+    probe = run_command(
+        ["git", "check-ignore", "--quiet", "--", relative_path],
+        repository,
+        timeout_seconds,
+    )
+    return probe["exit_code"] == 0
+
+
+def tracked_by_git(
+    repository: Path, relative_path: str, timeout_seconds: float
+) -> bool:
+    probe = run_command(
+        ["git", "ls-files", "--error-unmatch", "--", relative_path],
+        repository,
+        timeout_seconds,
+    )
+    return probe["exit_code"] == 0
+
+
+def configuration_entry(
+    repository: Path,
+    relative_path: str,
+    timeout_seconds: float,
+    ignore_probe_path: str | None = None,
+) -> dict[str, Any]:
+    path = repository.joinpath(relative_path)
+    present, symlinked = safe_managed_file_state(path, repository)
+    if relative_path.endswith("/") and not symlinked:
+        present = path.is_dir()
+    return {
+        "path": relative_path,
+        "present": present,
+        "symlinked": symlinked,
+        "ignored": ignored_by_git(
+            repository, ignore_probe_path or relative_path, timeout_seconds
+        ),
+    }
+
+
+def base_tool(
+    name: str, catalog_status: str = "active", setup_supported: bool = True
+) -> dict[str, Any]:
+    executable = shutil.which(name)
+    return {
+        "catalog_status": catalog_status,
+        "setup_supported": setup_supported,
+        "installed": executable is not None,
+        "executable": str(Path(executable).resolve()) if executable else None,
+        "version": None,
+        "status": "installed" if executable else "missing",
+        "configuration": [],
+        "probes": {},
+    }
+
+
+def normalized_probe(probe: dict[str, Any]) -> dict[str, Any]:
+    normalized = {
+        key: probe[key] for key in ("attempted", "ok", "exit_code", "timed_out")
+    }
+    if probe.get("error_code"):
+        normalized["error_code"] = probe["error_code"]
+    if probe.get("reason"):
+        normalized["reason"] = probe["reason"]
+    return normalized
+
+
+def resolved_executable(command: Any) -> Path | None:
+    if not isinstance(command, str) or not command:
+        return None
+    candidate = Path(command).expanduser()
+    if candidate.is_absolute():
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate.resolve()
+        return None
+    discovered = shutil.which(command)
+    return Path(discovered).resolve() if discovered else None
+
+
+def ouroboros_direct_launcher_matches(
+    transport: Any, ouroboros_executable: str | None
+) -> bool:
+    if not isinstance(transport, dict) or not ouroboros_executable:
+        return False
+    if transport.get("url"):
+        return False
+    if transport.get("type") not in {None, "stdio"}:
+        return False
+    resolved_command = resolved_executable(transport.get("command"))
+    return bool(
+        transport.get("args") == ["mcp", "serve"]
+        and resolved_command
+        and resolved_command == Path(ouroboros_executable).resolve()
+    )
+
+
+GROK_OUROBOROS_RUNTIME_VALUES = ("grok",)
+
+
+def ouroboros_isolated_launcher_matches(transport: Any) -> bool:
+    if not isinstance(transport, dict):
+        return False
+    resolved_command = resolved_executable(transport.get("command"))
+    selected_uvx = shutil.which("uvx")
+    if not resolved_command or not selected_uvx:
+        return False
+    if resolved_command != Path(selected_uvx).resolve():
+        return False
+    args = transport.get("args")
+    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+        return False
+    normalized_args = list(args)
+    if len(normalized_args) < 5:
+        return False
+    package_match = OUROBOROS_MCP_PACKAGE.fullmatch(normalized_args[4])
+    if not package_match:
+        return False
+    pinned_version = package_match.group(1)
+    if pinned_version and not supported_ouroboros_version(pinned_version):
+        return False
+    normalized_args[4] = "ouroboros-ai[mcp]"
+    env = transport.get("env", {})
+    if not isinstance(env, dict):
+        env = {}
+    env_runtime = env.get("OUROBOROS_AGENT_RUNTIME")
+    if env_runtime is not None and env_runtime not in GROK_OUROBOROS_RUNTIME_VALUES:
+        return False
+    normalized = tuple(normalized_args)
+    if normalized == OUROBOROS_UVX_MCP_ARGS:
+        return env_runtime in GROK_OUROBOROS_RUNTIME_VALUES
+    return normalized == (*OUROBOROS_UVX_MCP_ARGS, "--runtime", "grok")
+
+
+def selected_fields(value: Any, names: tuple[str, ...]) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {name: value[name] for name in names if name in value}
+
+
+def normalize_sanho_status(probe: dict[str, Any]) -> dict[str, Any]:
+    normalized = normalized_probe(probe)
+    result = probe.get("result")
+    if not isinstance(result, dict) or isinstance(result.get("error"), dict):
+        return normalized
+    safe: dict[str, Any] = {}
+    relation = result.get("relation")
+    if (
+        isinstance(relation, dict)
+        and isinstance(relation.get("known"), bool)
+        and all(
+            isinstance(relation.get(name), int)
+            and not isinstance(relation.get(name), bool)
+            and relation[name] >= 0
+            for name in ("behind", "ahead")
+        )
+    ):
+        safe["relation"] = selected_fields(relation, ("known", "behind", "ahead"))
+    for name, fields in (
+        ("publication", ("known", "pending")),
+        ("working_copy", ("known", "docs_clean")),
+    ):
+        source = result.get(name)
+        if isinstance(source, dict) and all(
+            isinstance(source.get(field), bool) for field in fields
+        ):
+            safe[name] = selected_fields(source, fields)
+    raw_preview = result.get("sync_preview")
+    preview = {}
+    if isinstance(raw_preview, dict) and all(
+        isinstance(raw_preview.get(field), bool) for field in ("known", "clean")
+    ):
+        preview = selected_fields(raw_preview, ("known", "clean"))
+    if isinstance(raw_preview, dict) and isinstance(raw_preview.get("conflicts"), list):
+        preview["conflict_count"] = len(raw_preview["conflicts"])
+    if preview:
+        safe["sync_preview"] = preview
+    readiness = result.get("local_readiness")
+    if isinstance(readiness, dict):
+        safe_readiness = {}
+        for operation in ("sync", "pull"):
+            source = readiness.get(operation)
+            if (
+                isinstance(source, dict)
+                and isinstance(source.get("ready"), bool)
+                and isinstance(source.get("blocked_by"), list)
+            ):
+                safe_readiness[operation] = {
+                    "ready": source["ready"],
+                    "blocked_by_count": len(source["blocked_by"]),
+                }
+        if safe_readiness:
+            safe["local_readiness"] = safe_readiness
+    if isinstance(result.get("sync_in_progress"), bool):
+        safe["sync_in_progress"] = result["sync_in_progress"]
+    normalized["contract_valid"] = {
+        "relation",
+        "publication",
+        "working_copy",
+        "sync_preview",
+        "local_readiness",
+        "sync_in_progress",
+    }.issubset(safe)
+    if safe:
+        normalized["result"] = safe
+    return normalized
+
+
+def normalize_sanho_doctor(probe: dict[str, Any]) -> dict[str, Any]:
+    normalized = normalized_probe(probe)
+    result = probe.get("result")
+    if not isinstance(result, dict) or isinstance(result.get("error"), dict):
+        return normalized
+    safe: dict[str, Any] = {}
+    if (
+        isinstance(result.get("warnings"), int)
+        and not isinstance(result.get("warnings"), bool)
+        and result["warnings"] >= 0
+    ):
+        safe["warnings"] = result["warnings"]
+    checks = result.get("checks")
+    checks_valid = False
+    if isinstance(checks, list):
+        checks_valid = all(
+            isinstance(check, dict)
+            and isinstance(check.get("name"), str)
+            and bool(check["name"])
+            and check.get("severity") in {"ok", "warning", "error"}
+            for check in checks
+        )
+        if checks_valid:
+            safe["check_count"] = len(checks)
+            safe["warning_check_count"] = sum(
+                1 for check in checks if check.get("severity") == "warning"
+            )
+    normalized["contract_valid"] = (
+        "warnings" in safe
+        and checks_valid
+        and safe["warnings"] == safe.get("warning_check_count")
+    )
+    if safe:
+        normalized["result"] = safe
+    return normalized
+
+
+def skill_root_symlinked(root: Path) -> bool:
+    try:
+        anchor = Path(os.path.commonpath((Path.home(), root)))
+        relative = root.relative_to(anchor)
+    except (ValueError, OSError):
+        return True
+    current = anchor
+    if current.is_symlink():
+        return True
+    for part in relative.parts:
+        if part == "..":
+            current = current.parent
+            continue
+        if part == ".":
+            continue
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
+
+
+def safe_skill_file_state(directory: Path, relative_path: str) -> tuple[bool, bool]:
+    if skill_root_symlinked(directory.parent):
+        return False, True
+    current = directory
+    if current.is_symlink():
+        return False, True
+    for part in Path(relative_path).parts:
+        current = current / part
+        if current.is_symlink():
+            return False, True
+    return current.is_file(), False
+
+
+def safe_managed_file_state(path: Path, boundary: Path) -> tuple[bool, bool]:
+    try:
+        relative = path.relative_to(boundary)
+    except ValueError:
+        return False, True
+    current = boundary
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            return False, True
+    return current.is_file(), False
+
+
+def managed_directory_tree_symlinked(path: Path, boundary: Path) -> bool:
+    _, symlinked = safe_managed_file_state(path, boundary)
+    if symlinked:
+        return True
+    if not path.is_dir():
+        return False
+    try:
+        for root, directories, files in os.walk(path, followlinks=False):
+            root_path = Path(root)
+            if any((root_path / name).is_symlink() for name in directories + files):
+                return True
+    except OSError:
+        return True
+    return False
+
+
+def inspect_agent_skill(name: str, required_files: tuple[str, ...]) -> dict[str, Any]:
+    installations: list[dict[str, Any]] = []
+    for root in skill_roots():
+        directory = root / name
+        if skill_root_symlinked(root):
+            installations.append(
+                {
+                    "path": str(directory),
+                    "symlinked": True,
+                    "frontmatter_valid": False,
+                    "files": [
+                        {
+                            "path": relative_path,
+                            "present": False,
+                            "symlinked": True,
+                            "sha256": None,
+                        }
+                        for relative_path in required_files
+                    ],
+                }
+            )
+            continue
+        if not directory.exists() and not directory.is_symlink():
+            continue
+        files = []
+        for relative_path in required_files:
+            path = directory / relative_path
+            present, symlinked = safe_skill_file_state(directory, relative_path)
+            files.append(
+                {
+                    "path": relative_path,
+                    "present": present,
+                    "symlinked": symlinked,
+                    "sha256": file_sha256(path) if present else None,
+                }
+            )
+        skill_entry = next(entry for entry in files if entry["path"] == "SKILL.md")
+        skill_path = directory / "SKILL.md"
+        installations.append(
+            {
+                "path": str(directory),
+                "symlinked": any(entry["symlinked"] for entry in files),
+                "frontmatter_valid": bool(skill_entry["present"])
+                and frontmatter_name(skill_path) == name,
+                "files": files,
+            }
+        )
+    if not installations:
+        status = "missing"
+    elif (
+        len(installations) == 1
+        and not installations[0]["symlinked"]
+        and installations[0]["frontmatter_valid"]
+        and all(entry["present"] for entry in installations[0]["files"])
+        and not any(entry["symlinked"] for entry in installations[0]["files"])
+    ):
+        status = "configured"
+    else:
+        status = "degraded"
+    return {
+        "status": status,
+        "present": bool(installations),
+        "duplicate": len(installations) > 1,
+        "installations": installations,
+    }
+
+
+def inspect_sanho_skill() -> dict[str, Any]:
+    return inspect_agent_skill("use-sanho", SANHO_SKILL_FILES)
+
+
+def normalize_podway_envelope(
+    probe: dict[str, Any],
+    command: str,
+    result_schemas: tuple[str, ...] = (),
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    normalized = normalized_probe(probe)
+    envelope = probe.get("result")
+    if not isinstance(envelope, dict):
+        return normalized, None
+    schema = envelope.get("schema")
+    if schema == "podway.error/v1":
+        code = envelope.get("code")
+        if code in {"SESSION_NOT_FOUND", "LEGACY_PROCEDURE_STATE_UNSUPPORTED"}:
+            normalized["error_code"] = code
+        else:
+            normalized["error_code"] = "unrecognized_podway_error"
+        normalized["output_schema"] = schema
+        return normalized, None
+    if schema != "podway.output/v3":
+        normalized["ok"] = False
+        normalized["error_code"] = "unexpected_output_schema"
+        return normalized, None
+    normalized["output_schema"] = schema
+    if envelope.get("command") != command:
+        normalized["ok"] = False
+        normalized["error_code"] = "unexpected_command"
+        return normalized, None
+    payload = envelope.get("result")
+    if not isinstance(payload, dict):
+        normalized["ok"] = False
+        normalized["error_code"] = "invalid_result"
+        return normalized, None
+    result_schema = payload.get("schema")
+    if result_schemas and result_schema not in result_schemas:
+        normalized["ok"] = False
+        normalized["error_code"] = "unexpected_result_schema"
+        return normalized, None
+    if isinstance(result_schema, str):
+        normalized["result_schema"] = result_schema
+    return normalized, payload
+
+
+def inspect_sanho(repository: Path, timeout_seconds: float) -> dict[str, Any]:
+    tool = base_tool("sanho")
+    tool["version_supported"] = False
+    tool["agent_skill"] = inspect_sanho_skill()
+    tool["configuration"] = [
+        configuration_entry(repository, ".sanho.json", timeout_seconds),
+        configuration_entry(repository, ".sanho_base.json", timeout_seconds),
+    ]
+    if not tool["installed"]:
+        tool["probes"]["version"] = skipped_probe("executable_missing")
+        return tool
+    version_probe = json_probe(
+        [tool["executable"], "version", "--json"], repository, timeout_seconds
+    )
+    tool["probes"]["version"] = normalized_probe(version_probe)
+    tool["version"] = version_from_probe(version_probe)
+    tool["version_supported"] = supported_sanho_version(tool["version"])
+    if not version_probe["ok"] or not tool["version_supported"]:
+        tool["status"] = "degraded"
+    if any(entry["symlinked"] for entry in tool["configuration"]):
+        tool["probes"]["status"] = skipped_probe("configuration_symlinked")
+        tool["probes"]["doctor"] = skipped_probe("configuration_symlinked")
+        tool["status"] = "degraded"
+        return tool
+    if not tool["configuration"][0]["present"]:
+        tool["probes"]["status"] = skipped_probe("configuration_missing")
+        tool["probes"]["doctor"] = skipped_probe("configuration_missing")
+        return tool
+    status_probe = json_probe(
+        [tool["executable"], "status", "--json"], repository, timeout_seconds
+    )
+    doctor_probe = json_probe(
+        [tool["executable"], "doctor", "--json"], repository, timeout_seconds
+    )
+    normalized_status = normalize_sanho_status(status_probe)
+    normalized_doctor = normalize_sanho_doctor(doctor_probe)
+    tool["probes"].update({"status": normalized_status, "doctor": normalized_doctor})
+    doctor_result = normalized_doctor.get("result")
+    no_doctor_warnings = (
+        isinstance(doctor_result, dict) and doctor_result.get("warnings") == 0
+    )
+    tool["status"] = (
+        "configured"
+        if version_probe["ok"]
+        and tool["version_supported"]
+        and normalized_status["ok"]
+        and normalized_doctor["ok"]
+        and normalized_status.get("contract_valid") is True
+        and normalized_doctor.get("contract_valid") is True
+        and no_doctor_warnings
+        else "degraded"
+    )
+    return tool
+
+
+def normalize_mulgae_command_envelope(
+    probe: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    normalized = normalized_probe(probe)
+    envelope = probe.get("result")
+    if not isinstance(envelope, dict):
+        return normalized, None
+    schema = envelope.get("schema_version")
+    if isinstance(schema, str):
+        normalized["output_schema"] = schema
+    if schema != MULGAE_COMMAND_RESULT_SCHEMA:
+        normalized["error_code"] = "unsupported_output_schema"
+        return normalized, None
+    return normalized, envelope
+
+
+def mulgae_reason_codes(envelope: Any) -> list[str]:
+    if not isinstance(envelope, dict) or not isinstance(envelope.get("reasons"), list):
+        return []
+    return [
+        reason["code"]
+        for reason in envelope["reasons"]
+        if isinstance(reason, dict)
+        and isinstance(reason.get("code"), str)
+        and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", reason["code"])
+    ]
+
+
+def normalize_mulgae_diagnostic_check(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    status = value.get("status")
+    reason_codes = value.get("reason_codes")
+    if status not in {"verified", "failed", "unverifiable", "not_applicable"}:
+        return None
+    if not isinstance(reason_codes, list) or not all(
+        isinstance(reason, str)
+        and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", reason) is not None
+        for reason in reason_codes
+    ):
+        return None
+    return {"status": status, "reason_codes": reason_codes}
+
+
+def normalize_mulgae_readiness(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    state = value.get("state")
+    exit_code = value.get("exit_code")
+    reason_codes = value.get("reason_codes")
+    if state not in {"ready", "degraded", "unverified", "unsafe"}:
+        return None
+    if (
+        exit_code not in {0, 4, 8}
+        or isinstance(exit_code, bool)
+        or not isinstance(reason_codes, list)
+    ):
+        return None
+    if not all(
+        isinstance(reason, str)
+        and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", reason) is not None
+        for reason in reason_codes
+    ):
+        return None
+    return {"state": state, "exit_code": exit_code, "reason_codes": reason_codes}
+
+
+def normalize_mulgae_cli_compatibility(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    status = value.get("status")
+    if status not in {"verified", "failed", "unverifiable", "not_applicable"}:
+        return None
+    fields = (
+        "observed_version",
+        "eligibility",
+        "compatibility",
+        "minimum_version",
+        "verified_latest",
+        "reason_code",
+    )
+    if not all(isinstance(value.get(field), str) for field in fields):
+        return None
+    if value["eligibility"] not in {"eligible", "ineligible", "not_evaluated"}:
+        return None
+    if value["compatibility"] not in {
+        "verified",
+        "newer_than_verified",
+        "below_minimum",
+        "malformed",
+        "not_observed",
+    }:
+        return None
+    version_pattern = r"(?:|\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)"
+    if any(
+        re.fullmatch(version_pattern, value[field]) is None
+        for field in ("observed_version", "minimum_version", "verified_latest")
+    ):
+        return None
+    if (
+        value["reason_code"]
+        and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", value["reason_code"]) is None
+    ):
+        return None
+    return {"status": status, **{field: value[field] for field in fields}}
+
+
+def normalize_mulgae_provider_inventory(value: Any) -> list[dict[str, Any]] | None:
+    if not isinstance(value, list) or len(value) != 4:
+        return None
+    inventory: list[dict[str, Any]] = []
+    for row in value:
+        if not isinstance(row, dict):
+            return None
+        family = row.get("family")
+        configured = row.get("configured")
+        referenced_by_roles = row.get("referenced_by_roles")
+        state = row.get("state")
+        reason = row.get("reason")
+        binary_available = normalize_mulgae_diagnostic_check(
+            row.get("binary_available")
+        )
+        cli_compatible = normalize_mulgae_cli_compatibility(row.get("cli_compatible"))
+        if (
+            family not in {"kimi", "zcode", "agy", "codex"}
+            or not isinstance(configured, bool)
+            or not isinstance(referenced_by_roles, list)
+            or not all(
+                role
+                in {
+                    "logic",
+                    "security",
+                    "maintainability",
+                    "product",
+                    "documentation",
+                    "testing",
+                    "artist",
+                }
+                for role in referenced_by_roles
+            )
+            or state
+            not in {
+                "eligible",
+                "unavailable",
+                "not_configured",
+                "not_observed",
+            }
+            or not isinstance(reason, str)
+            or re.fullmatch(r"[a-z][a-z0-9_]{0,63}", reason) is None
+            or binary_available is None
+            or cli_compatible is None
+        ):
+            return None
+        inventory.append(
+            {
+                "family": family,
+                "configured": configured,
+                "referenced_by_roles": referenced_by_roles,
+                "state": state,
+                "reason": reason,
+                "binary_available": binary_available,
+                "cli_compatible": cli_compatible,
+            }
+        )
+    if [row["family"] for row in inventory] != ["kimi", "zcode", "agy", "codex"]:
+        return None
+    return inventory
+
+
+def normalize_mulgae_doctor(probe: dict[str, Any]) -> dict[str, Any]:
+    normalized, envelope = normalize_mulgae_command_envelope(probe)
+    if not isinstance(envelope, dict):
+        return normalized
+    result = envelope.get("result")
+    doctor = result.get("doctor") if isinstance(result, dict) else None
+    if isinstance(result, dict):
+        safe: dict[str, Any] = {}
+        if isinstance(doctor, dict):
+            schema = doctor.get("schema_version")
+            if isinstance(schema, str):
+                normalized["result_schema"] = schema
+            if schema != MULGAE_DOCTOR_RESULT_SCHEMA:
+                normalized["doctor_capability"] = "unsupported"
+                normalized["result"] = safe
+                return normalized
+            safe_doctor: dict[str, Any] = {"schema_version": schema}
+            raw_config = doctor.get("config")
+            config: dict[str, Any] = {}
+            if isinstance(raw_config, dict):
+                allowed_config_values = {
+                    "status": {"ready", "missing", "invalid", "unsafe"},
+                    "locality": {"verified", "rejected", "not_observed"},
+                    "provenance_state": {"accepted", "rejected", "not_observed"},
+                }
+                for name, allowed in allowed_config_values.items():
+                    value = raw_config.get(name)
+                    if value in allowed:
+                        config[name] = value
+                reason_codes = raw_config.get("reason_codes")
+                allowed_config_reasons = {
+                    "config_missing",
+                    "local_config_missing",
+                    "config_provider_identity_invalid",
+                    "config_role_mapping_invalid",
+                    "config_yaml_invalid",
+                    "config_locality_unsafe",
+                    "config_not_observed_due_to_locality",
+                }
+                if isinstance(reason_codes, list) and all(
+                    code in allowed_config_reasons for code in reason_codes
+                ):
+                    config["reason_codes"] = reason_codes
+            if config:
+                safe_doctor["config"] = config
+            configured = doctor.get("configured_provider_ids")
+            if isinstance(configured, list) and all(
+                isinstance(provider, str) for provider in configured
+            ):
+                canonical = ["kimi", "zcode", "agy", "codex"]
+                if configured == [
+                    provider for provider in canonical if provider in configured
+                ]:
+                    safe_doctor["configured_provider_ids"] = configured
+            inventory = doctor.get("provider_inventory")
+            if isinstance(inventory, list):
+                safe_inventory = normalize_mulgae_provider_inventory(inventory)
+                if safe_inventory is not None:
+                    safe_doctor["provider_inventory"] = safe_inventory
+            for name in (
+                "config_v3",
+                "local_configuration",
+                "provider_identity",
+            ):
+                selected = normalize_mulgae_diagnostic_check(doctor.get(name))
+                if selected is not None:
+                    safe_doctor[name] = selected
+            raw_assignment = doctor.get("assignment")
+            assignment = {}
+            if isinstance(raw_assignment, dict):
+                for name in ("state", "resilience"):
+                    value = raw_assignment.get(name)
+                    if value in {"ready", "unavailable", "not_observed"}:
+                        assignment[name] = value
+            if assignment:
+                safe_doctor["assignment"] = assignment
+            for name in (
+                "readiness",
+                "configured_readiness",
+                "role_route_readiness",
+            ):
+                selected = normalize_mulgae_readiness(doctor.get(name))
+                if selected is not None:
+                    safe_doctor[name] = selected
+            platform_evidence = doctor.get("platform_evidence")
+            if isinstance(platform_evidence, list):
+                safe_doctor["platform_evidence"] = [
+                    {"cell": evidence["cell"], "native": evidence["native"]}
+                    for evidence in platform_evidence
+                    if isinstance(evidence, dict)
+                    and evidence.get("cell")
+                    in {"darwin-arm64", "darwin-amd64", "linux-amd64", "linux-arm64"}
+                    and isinstance(evidence.get("native"), bool)
+                ]
+            required_fields = {
+                "config_v3",
+                "local_configuration",
+                "provider_identity",
+                "configured_provider_ids",
+                "provider_inventory",
+                "readiness",
+                "configured_readiness",
+                "role_route_readiness",
+            }
+            if not required_fields.issubset(safe_doctor):
+                normalized["doctor_capability"] = "invalid"
+                normalized["result"] = safe
+                return normalized
+            normalized["doctor_capability"] = "supported"
+            safe["doctor"] = safe_doctor
+        else:
+            normalized["doctor_capability"] = "unsupported"
+        normalized["result"] = safe
+    reason_codes = mulgae_reason_codes(envelope)
+    if reason_codes:
+        normalized["reason_codes"] = reason_codes
+    return normalized
+
+
+def inspect_mulgae_installation_prerequisites(
+    repository: Path, timeout_seconds: float
+) -> dict[str, Any]:
+    go_executable = shutil.which("go")
+    prerequisite: dict[str, Any] = {
+        "go": {
+            "installed": go_executable is not None,
+            "version": None,
+            "supported": False,
+            "minimum": "go1.26.6",
+        }
+    }
+    if not go_executable:
+        prerequisite["go"]["probe"] = skipped_probe("executable_missing")
+        return prerequisite
+    probe = json_probe(
+        [go_executable, "env", "-json", "GOVERSION", "GOOS", "GOARCH"],
+        repository,
+        timeout_seconds,
+    )
+    normalized = normalized_probe(probe)
+    result = probe.get("result")
+    if isinstance(result, dict):
+        version = result.get("GOVERSION")
+        safe_result: dict[str, str] = {}
+        if isinstance(version, str) and re.fullmatch(
+            rf"go{CANONICAL_NUMERIC_COMPONENT}\."
+            rf"{CANONICAL_NUMERIC_COMPONENT}(?:\."
+            rf"{CANONICAL_NUMERIC_COMPONENT})?(?:[-+][0-9A-Za-z.-]+)?",
+            version,
+        ):
+            prerequisite["go"]["version"] = version
+            prerequisite["go"]["supported"] = supported_mulgae_go_version(version)
+            safe_result["GOVERSION"] = version
+        goos = result.get("GOOS")
+        if goos in {
+            "aix",
+            "android",
+            "darwin",
+            "dragonfly",
+            "freebsd",
+            "illumos",
+            "ios",
+            "js",
+            "linux",
+            "netbsd",
+            "openbsd",
+            "plan9",
+            "solaris",
+            "wasip1",
+            "windows",
+        }:
+            safe_result["GOOS"] = goos
+        goarch = result.get("GOARCH")
+        if goarch in {
+            "386",
+            "amd64",
+            "arm",
+            "arm64",
+            "loong64",
+            "mips",
+            "mips64",
+            "mips64le",
+            "mipsle",
+            "ppc64",
+            "ppc64le",
+            "riscv64",
+            "s390x",
+            "wasm",
+        }:
+            safe_result["GOARCH"] = goarch
+        normalized["result"] = safe_result
+    prerequisite["go"]["probe"] = normalized
+    return prerequisite
+
+
+def mulgae_configuration_entry(
+    repository: Path, relative_path: str, timeout_seconds: float
+) -> dict[str, Any]:
+    entry = configuration_entry(repository, relative_path, timeout_seconds)
+    entry["tracked"] = tracked_by_git(repository, relative_path, timeout_seconds)
+    if relative_path == ".mulgae/local.yaml":
+        entry["mode"] = None
+        if entry["present"]:
+            try:
+                entry["mode"] = oct(
+                    repository.joinpath(relative_path).stat().st_mode & 0o777
+                )
+            except OSError:
+                pass
+        entry["mode_0600"] = entry["mode"] == "0o600"
+    return entry
+
+
+def resolve_mcp_command(command: Any) -> Path | None:
+    if not isinstance(command, str) or not command:
+        return None
+    candidate = Path(command).expanduser()
+    if (
+        candidate.is_absolute()
+        and candidate.is_file()
+        and os.access(candidate, os.X_OK)
+    ):
+        return candidate.resolve()
+    if not candidate.is_absolute():
+        discovered = shutil.which(command)
+        if discovered:
+            return Path(discovered).resolve()
+    return None
+
+
+def mcp_recommendation(global_status: str, local_present: bool) -> str:
+    if local_present:
+        if global_status == "configured":
+            return "confirm_or_remove_local_registration"
+        return "confirm_local_intent_or_migrate_to_global"
+    if global_status == "configured":
+        return "none"
+    if global_status == "missing":
+        return "install_global_registration"
+    return "repair_global_registration"
+
+
+def grok_mcp_entries(server: str, repository: Path) -> dict[str, Any]:
+    try:
+        import tomllib
+    except ImportError:
+        return {
+            "scopes": {"user": None, "project": None},
+            "invalid_config": None,
+            "invalid_scopes": {},
+            "disabled_servers": (),
+            "unverifiable": "tomllib_unavailable",
+        }
+
+    scopes: dict[str, Any] = {"user": None, "project": None}
+    invalid_scopes: dict[str, str] = {}
+    disabled_servers: tuple[str, ...] = ()
+    grok_home = os.environ.get("GROK_HOME")
+    user_config = Path(grok_home).expanduser() / "config.toml" if grok_home else Path.home() / ".grok" / "config.toml"
+    for label, source in (
+        ("user", user_config),
+        ("project", repository.joinpath(".grok/config.toml")),
+    ):
+        try:
+            if source.is_symlink():
+                return {
+                    "scopes": {"user": None, "project": None},
+                    "invalid_config": None,
+                    "invalid_scopes": {},
+                    "disabled_servers": disabled_servers,
+                    "unverifiable": f"{label}_config_symlinked",
+                }
+            document = tomllib.loads(source.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            continue
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+            invalid_scopes[label] = f"{label}_config_invalid_toml"
+            continue
+        if not isinstance(document, dict):
+            continue
+        if label == "user":
+            listed = document.get("disabled_mcp_servers")
+            if isinstance(listed, list) and all(isinstance(name, str) for name in listed):
+                disabled_servers = tuple(listed)
+        servers = document.get("mcp_servers")
+        if isinstance(servers, dict) and server in servers:
+            scopes[label] = servers[server]
+    return {
+        "scopes": scopes,
+        "invalid_config": next(iter(invalid_scopes), None),
+        "invalid_scopes": invalid_scopes,
+        "disabled_servers": disabled_servers,
+        "unverifiable": None,
+    }
+
+
+def grok_mcp_scope_status(
+    entry: Any,
+    selected_executable: str | None,
+    repository: Path,
+    scope: str,
+    server: str,
+    disabled_servers: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    if entry is None:
+        return {"status": "missing", "reason": "registration_not_found"}
+    registration: dict[str, Any] = {
+        "status": "degraded",
+        "stdio": None,
+        "command_resolvable": None,
+        "binary_matches_selected": None,
+        "arguments_match": None,
+        "repository_bound": None,
+        "startup_timeout_sec": None,
+        "tool_timeout_sec": None,
+    }
+    if not isinstance(entry, dict):
+        registration["reason"] = "registration_mismatch"
+        return registration
+    if entry.get("enabled") is False or server in disabled_servers:
+        registration["reason"] = "registration_disabled"
+        return registration
+    stdio = not entry.get("url")
+    command = entry.get("command")
+    resolved_command = resolve_mcp_command(command)
+    binary_matches: bool | None = None
+    if selected_executable is not None:
+        binary_matches = bool(
+            resolved_command and resolved_command == Path(selected_executable).resolve()
+        )
+    args = entry.get("args")
+    try:
+        canonical = repository.resolve()
+    except OSError:
+        canonical = repository
+    arguments_match = False
+    repository_bound = scope == "global"
+    if isinstance(args, list) and all(isinstance(argument, str) for argument in args):
+        if server == "mulgae":
+            if scope == "global":
+                arguments_match = args == ["mcp"]
+            elif len(args) == 3 and args[:2] == ["mcp", "--project-root"]:
+                try:
+                    repository_bound = Path(args[2]).expanduser().resolve() == canonical
+                except OSError:
+                    repository_bound = False
+                arguments_match = repository_bound
+        elif server == "gaori":
+            if scope == "global":
+                arguments_match = args == ["mcp"]
+            elif len(args) == 3 and args[0] == "--repo" and args[2] == "mcp":
+                try:
+                    repository_bound = Path(args[1]).expanduser().resolve() == canonical
+                except OSError:
+                    repository_bound = False
+                arguments_match = repository_bound
+    startup_timeout = entry.get("startup_timeout_sec")
+    tool_timeout = entry.get("tool_timeout_sec")
+    min_tool = (
+        MULGAE_MCP_TOOL_TIMEOUT_SEC if server == "mulgae" else GAORI_MCP_TOOL_TIMEOUT_SEC
+    )
+    registration.update(
+        {
+            "stdio": stdio,
+            "command_resolvable": resolved_command is not None,
+            "binary_matches_selected": binary_matches,
+            "arguments_match": arguments_match,
+            "repository_bound": repository_bound,
+            "startup_timeout_sec": startup_timeout,
+            "tool_timeout_sec": tool_timeout,
+        }
+    )
+    cwd = entry.get("cwd")
+    if cwd not in (None, ""):
+        if scope == "global":
+            cwd_bound = False
+        else:
+            try:
+                cwd_bound = Path(str(cwd)).expanduser().resolve() == canonical
+            except OSError:
+                cwd_bound = False
+    else:
+        cwd_bound = True
+    if not stdio:
+        registration["reason"] = "registration_not_stdio"
+    elif resolved_command is None:
+        registration["reason"] = "command_unresolvable"
+    elif selected_executable is None:
+        registration["reason"] = "binary_unselected"
+    elif not binary_matches:
+        registration["reason"] = "registration_mismatch"
+    elif not cwd_bound:
+        registration["reason"] = "registration_mismatch"
+    elif not arguments_match:
+        registration["reason"] = "registration_mismatch"
+    elif not (
+        finite_number(startup_timeout)
+        and startup_timeout >= 30
+        and finite_number(tool_timeout)
+        and tool_timeout >= min_tool
+    ):
+        registration["reason"] = "registration_mismatch"
+    else:
+        registration["status"] = "configured"
+    return registration
+
+
+def grok_mcp_scopes(server: str, repository: Path, selected_executable: str | None) -> dict[str, Any]:
+    reading = grok_mcp_entries(server, repository)
+    project_config_present, project_config_symlinked = safe_managed_file_state(
+        repository / ".grok" / "config.toml", repository
+    )
+    registration: dict[str, Any] = {
+        "status": "missing",
+        "preferred_scope": "global",
+        "effective_scope": "none",
+        "local_confirmation_required": None,
+    }
+    if reading.get("unverifiable"):
+        registration.update(
+            {
+                "status": "unverifiable",
+                "effective_scope": "unverifiable",
+                "reason": reading["unverifiable"],
+                "global": {"status": "unverifiable", "reason": reading["unverifiable"]},
+                "local": {
+                    "status": "unverifiable",
+                    "reason": reading["unverifiable"],
+                    "project_config_present": project_config_present,
+                    "project_config_symlinked": project_config_symlinked,
+                },
+            }
+        )
+        return registration
+    disabled_servers = tuple(reading.get("disabled_servers") or ())
+    invalid_scopes = dict(reading.get("invalid_scopes") or {})
+    if reading.get("invalid_config") and reading["invalid_config"] not in invalid_scopes:
+        invalid_scopes[reading["invalid_config"]] = (
+            f"{reading['invalid_config']}_config_invalid_toml"
+        )
+    if "user" in invalid_scopes:
+        global_registration = {
+            "status": "degraded",
+            "reason": invalid_scopes["user"],
+        }
+    else:
+        global_registration = grok_mcp_scope_status(
+            reading["scopes"]["user"],
+            selected_executable,
+            repository,
+            "global",
+            server,
+            disabled_servers,
+        )
+    if project_config_symlinked:
+        registration.update(
+            {
+                "status": "unverifiable",
+                "effective_scope": "unverifiable",
+                "reason": "project_configuration_symlinked",
+                "global": global_registration,
+                "local": {
+                    "status": "unverifiable",
+                    "reason": "project_configuration_symlinked",
+                    "project_config_present": project_config_present,
+                    "project_config_symlinked": project_config_symlinked,
+                },
+                "recommendation": "resolve_symlinked_local_configuration",
+            }
+        )
+        return registration
+    if "project" in invalid_scopes:
+        local_registration = {
+            "status": "degraded",
+            "reason": invalid_scopes["project"],
+            "project_config_present": project_config_present,
+            "project_config_symlinked": project_config_symlinked,
+        }
+    else:
+        local_registration = grok_mcp_scope_status(
+            reading["scopes"]["project"],
+            selected_executable,
+            repository,
+            "local",
+            server,
+            disabled_servers,
+        )
+        local_registration.update(
+            {
+                "project_config_present": project_config_present,
+                "project_config_symlinked": project_config_symlinked,
+            }
+        )
+        if local_registration["status"] == "missing" and not project_config_present:
+            local_registration["reason"] = "project_configuration_missing"
+    if reading["scopes"]["project"] is not None:
+        effective_scope = "local"
+        effective_registration: dict[str, Any] | None = local_registration
+    elif reading["scopes"]["user"] is not None:
+        effective_scope = "global"
+        effective_registration = global_registration
+    else:
+        effective_scope = "none"
+        effective_registration = None
+    local_confirmable = local_registration["status"] != "missing"
+    registration.update(
+        {
+            "status": (
+                effective_registration["status"]
+                if effective_registration is not None
+                else ("degraded" if invalid_scopes else "missing")
+            ),
+            "effective_scope": effective_scope,
+            "local_confirmation_required": local_confirmable,
+            "global": global_registration,
+            "local": local_registration,
+            "recommendation": mcp_recommendation(
+                global_registration["status"], bool(local_confirmable)
+            ),
+        }
+    )
+    if effective_registration is not None and effective_registration.get("reason"):
+        registration["reason"] = effective_registration["reason"]
+    elif effective_registration is None and invalid_scopes:
+        registration["reason"] = next(iter(invalid_scopes.values()))
+    return registration
+
+
+def inspect_mulgae_mcp(
+    repository: Path, mulgae_executable: str | None, timeout_seconds: float
+) -> dict[str, Any]:
+    return grok_mcp_scopes("mulgae", repository, mulgae_executable)
+
+
+def inspect_mulgae(
+    repository: Path, timeout_seconds: float, require_mcp: bool = False
+) -> dict[str, Any]:
+    tool = base_tool("mulgae")
+    tool["version_supported"] = False
+    tool["platform"] = {
+        "system": platform.system(),
+        "machine": platform.machine(),
+        "supported": platform.system() == "Darwin"
+        and platform.machine() in {"arm64", "aarch64"},
+    }
+    tool["installation_prerequisites"] = inspect_mulgae_installation_prerequisites(
+        repository, timeout_seconds
+    )
+    tool["agent_skill"] = inspect_agent_skill("use-mulgae", MULGAE_SKILL_FILES)
+    tool["configuration"] = [
+        mulgae_configuration_entry(repository, ".mulgae/config.yaml", timeout_seconds),
+        mulgae_configuration_entry(repository, ".mulgae/local.yaml", timeout_seconds),
+        configuration_entry(
+            repository,
+            ".mulgae/runtime/",
+            timeout_seconds,
+            ".mulgae/runtime/example",
+        ),
+        mulgae_configuration_entry(repository, ".mulgaeignore", timeout_seconds),
+        configuration_entry(repository, ".grok/config.toml", timeout_seconds),
+    ]
+    tool["mcp_registration"] = inspect_mulgae_mcp(
+        repository, tool["executable"], timeout_seconds
+    )
+    unavailable_check = {"status": "not_applicable", "reason_codes": []}
+    unavailable_readiness = {
+        "state": "unverified",
+        "exit_code": 4,
+        "reason_codes": ["doctor_v2_not_observed"],
+    }
+    tool["provider_inventory"] = []
+    tool["mcp_required_for_status"] = require_mcp
+    tool["health"] = {
+        "mulgae_cli_compatibility": (
+            "unavailable" if not tool["installed"] else "unverifiable"
+        ),
+        "doctor_contract": "not_observed",
+        "config_v3": unavailable_check.copy(),
+        "local_configuration": unavailable_check.copy(),
+        "provider_identity": unavailable_check.copy(),
+        "configured_readiness": unavailable_readiness.copy(),
+        "role_route_readiness": unavailable_readiness.copy(),
+        "mcp_registration": tool["mcp_registration"]["status"],
+    }
+    if not tool["installed"]:
+        tool["probes"]["version"] = skipped_probe("executable_missing")
+        tool["probes"]["doctor"] = skipped_probe("executable_missing")
+        return tool
+    version_probe = json_probe(
+        [tool["executable"], "version", "--json"], repository, timeout_seconds
+    )
+    tool["probes"]["version"] = normalized_probe(version_probe)
+    tool["version"] = version_from_probe(version_probe)
+    tool["version_supported"] = supported_mulgae_version(tool["version"])
+    project_config, local_config = tool["configuration"][:2]
+    unsafe_configuration = any(
+        entry["symlinked"] for entry in (project_config, local_config)
+    )
+    missing_configuration = not all(
+        entry["present"] for entry in (project_config, local_config)
+    )
+    if unsafe_configuration or missing_configuration:
+        tool["probes"]["doctor"] = skipped_probe(
+            "configuration_symlinked"
+            if unsafe_configuration
+            else "configuration_missing"
+        )
+        tool["health"]["mulgae_cli_compatibility"] = (
+            "compatible"
+            if version_probe["ok"]
+            and tool["version_supported"]
+            and tool["platform"]["supported"]
+            else "incompatible"
+        )
+        both_missing = not project_config["present"] and not local_config["present"]
+        tool["status"] = (
+            "installed"
+            if both_missing
+            and not unsafe_configuration
+            and tool["health"]["mulgae_cli_compatibility"] == "compatible"
+            else "degraded"
+        )
+        return tool
+    doctor_probe = json_probe(
+        [tool["executable"], "doctor", "--output", "json"],
+        repository,
+        timeout_seconds,
+    )
+    normalized_doctor = normalize_mulgae_doctor(doctor_probe)
+    tool["probes"]["doctor"] = normalized_doctor
+
+    both_missing = not project_config["present"] and not local_config["present"]
+    doctor_result = normalized_doctor.get("result")
+    doctor_payload = (
+        doctor_result.get("doctor") if isinstance(doctor_result, dict) else None
+    )
+    mulgae_cli_compatible = (
+        version_probe["ok"]
+        and tool["version_supported"]
+        and tool["platform"]["supported"]
+    )
+    health = tool["health"]
+    health["mulgae_cli_compatibility"] = (
+        "compatible" if mulgae_cli_compatible else "incompatible"
+    )
+    doctor_supported = normalized_doctor.get("doctor_capability") == "supported"
+    doctor_command_ok = normalized_doctor["ok"]
+    doctor_capability = normalized_doctor.get("doctor_capability")
+    health["doctor_contract"] = (
+        doctor_capability
+        if doctor_capability in {"supported", "unsupported", "invalid"}
+        else "unsupported"
+    )
+    if doctor_supported and isinstance(doctor_payload, dict):
+        for name in (
+            "config_v3",
+            "local_configuration",
+            "provider_identity",
+            "configured_readiness",
+            "role_route_readiness",
+        ):
+            value = doctor_payload.get(name)
+            if isinstance(value, dict):
+                health[name] = value
+        inventory = doctor_payload.get("provider_inventory")
+        if isinstance(inventory, list):
+            tool["provider_inventory"] = inventory
+    else:
+        capability_reason = (
+            "doctor_v2_invalid"
+            if health["doctor_contract"] == "invalid"
+            else "doctor_v2_unsupported"
+        )
+        unsupported = {
+            "status": "unverifiable",
+            "reason_codes": [capability_reason],
+        }
+        health["config_v3"] = unsupported.copy()
+        health["local_configuration"] = unsupported.copy()
+        health["provider_identity"] = unsupported.copy()
+        unsupported_readiness = {
+            "state": "unverified",
+            "exit_code": 4,
+            "reason_codes": [capability_reason],
+        }
+        health["configured_readiness"] = unsupported_readiness.copy()
+        health["role_route_readiness"] = unsupported_readiness.copy()
+
+    configured_readiness = health["configured_readiness"]
+    offline_ready = (
+        configured_readiness.get("state") == "ready"
+        and configured_readiness.get("exit_code") == 0
+    )
+    mcp_status = tool["mcp_registration"]["status"]
+    mcp_blocks = mcp_status == "degraded" or (
+        require_mcp and mcp_status != "configured"
+    )
+    if (
+        mulgae_cli_compatible
+        and doctor_supported
+        and doctor_command_ok
+        and offline_ready
+        and not mcp_blocks
+    ):
+        tool["status"] = "configured"
+    elif (
+        both_missing
+        and mulgae_cli_compatible
+        and doctor_supported
+        and doctor_command_ok
+        and not mcp_blocks
+    ):
+        tool["status"] = "installed"
+    else:
+        tool["status"] = "degraded"
+    return tool
+
+
+def inspect_gaori_mcp(
+    repository: Path, gaori_executable: str | None, timeout_seconds: float
+) -> dict[str, Any]:
+    return grok_mcp_scopes("gaori", repository, gaori_executable)
+
+
+def inspect_gaori(repository: Path, timeout_seconds: float) -> dict[str, Any]:
+    tool = base_tool("gaori")
+    tool["version_supported"] = False
+    tool["agent_skill"] = inspect_agent_skill("use-gaori", GAORI_SKILL_FILES)
+    tool["configuration"] = [
+        configuration_entry(repository, ".gaori/tester.yaml", timeout_seconds),
+        configuration_entry(
+            repository,
+            ".gaori/tester/rules/",
+            timeout_seconds,
+            ".gaori/tester/rules/example.yaml",
+        ),
+        configuration_entry(repository, ".gaori/toolchain.yaml", timeout_seconds),
+        configuration_entry(repository, ".grok/config.toml", timeout_seconds),
+    ]
+    tool["configuration"][1]["tree_symlinked"] = managed_directory_tree_symlinked(
+        repository / ".gaori/tester/rules", repository
+    )
+    tool["mcp_registration"] = inspect_gaori_mcp(
+        repository, tool["executable"], timeout_seconds
+    )
+    if not tool["installed"]:
+        tool["probes"]["version"] = skipped_probe("executable_missing")
+        tool["probes"]["config_check"] = skipped_probe("executable_missing")
+        return tool
+    version_probe = json_probe(
+        [tool["executable"], "version", "--json"], repository, timeout_seconds
+    )
+    tool["probes"]["version"] = normalized_probe(version_probe)
+    tool["version"] = version_from_probe(version_probe)
+    tool["version_supported"] = supported_gaori_version(tool["version"])
+    if not version_probe["ok"] or not tool["version_supported"]:
+        tool["status"] = "degraded"
+    if (
+        any(entry["symlinked"] for entry in tool["configuration"][:3])
+        or tool["configuration"][1]["tree_symlinked"]
+    ):
+        tool["probes"]["config_check"] = skipped_probe("configuration_symlinked")
+        tool["status"] = "degraded"
+        return tool
+    if not tool["configuration"][0]["present"]:
+        tool["probes"]["config_check"] = skipped_probe("configuration_missing")
+        return tool
+    config_probe = json_probe(
+        [tool["executable"], "--json", "config", "check"],
+        repository,
+        timeout_seconds,
+    )
+    tool["probes"]["config_check"] = normalized_probe(config_probe)
+    tool["status"] = (
+        "configured"
+        if version_probe["ok"] and tool["version_supported"] and config_probe["ok"]
+        else "degraded"
+    )
+    return tool
+
+
+def skill_roots() -> list[Path]:
+    candidates: list[Path] = []
+    grok_home = os.environ.get("GROK_HOME")
+    if grok_home:
+        candidates.append(Path(grok_home).expanduser().joinpath("skills"))
+    else:
+        candidates.append(Path.home().joinpath(".grok/skills"))
+    candidates.extend(
+        [
+            Path.home().joinpath(".agents/skills"),
+            Path.home().joinpath(".claude/skills"),
+            Path.home().joinpath(".cursor/skills"),
+        ]
+    )
+    roots: list[Path] = []
+    for candidate in candidates:
+        lexical = candidate if candidate.is_absolute() else Path.cwd() / candidate
+        if lexical not in roots:
+            roots.append(lexical)
+    return roots
+
+
+def frontmatter_name(skill_path: Path) -> str | None:
+    try:
+        content = skill_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return None
+    match = re.match(r"\A---\n(.*?)\n---(?:\n|\Z)", content, re.DOTALL)
+    if not match:
+        return None
+    name_match = re.search(
+        r"^name:\s*[\"']?([^\"'#\n]+?)[\"']?\s*$", match.group(1), re.MULTILINE
+    )
+    return name_match.group(1).strip() if name_match else None
+
+
+def frontmatter_version(skill_path: Path) -> str | None:
+    try:
+        content = skill_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return None
+    match = re.match(r"\A---\n(.*?)\n---(?:\n|\Z)", content, re.DOTALL)
+    if not match:
+        return None
+    version_match = re.search(
+        r"^(?:  )?version:\s*[\"']?([^\"'#\n]+?)[\"']?\s*$",
+        match.group(1),
+        re.MULTILINE,
+    )
+    return version_match.group(1).strip() if version_match else None
+
+
+def unexpected_skill_entries(
+    directory: Path, expected_files: tuple[str, ...]
+) -> list[str]:
+    expected_file_set = set(expected_files)
+    expected_directories = {
+        str(parent)
+        for relative_path in expected_files
+        for parent in Path(relative_path).parents
+        if str(parent) != "."
+    }
+    actual_files: set[str] = set()
+    actual_directories: set[str] = set()
+    unsafe_entries: set[str] = set()
+    if directory.is_symlink() or not directory.is_dir():
+        return ["<unsafe-or-unreadable>"]
+    try:
+        for root, directories, files in os.walk(directory, followlinks=False):
+            root_path = Path(root)
+            retained_directories = []
+            for name in directories:
+                path = root_path / name
+                relative = str(path.relative_to(directory))
+                if path.is_symlink():
+                    unsafe_entries.add(relative)
+                else:
+                    actual_directories.add(relative)
+                    retained_directories.append(name)
+            directories[:] = retained_directories
+            for name in files:
+                path = root_path / name
+                relative = str(path.relative_to(directory))
+                if path.is_symlink():
+                    unsafe_entries.add(relative)
+                else:
+                    actual_files.add(relative)
+    except OSError:
+        return ["<unsafe-or-unreadable>"]
+    return sorted(
+        unsafe_entries
+        | (actual_files - expected_file_set)
+        | (actual_directories - expected_directories)
+    )
+
+
+def inspect_writing_skill(
+    *,
+    skill_name: str,
+    expected_files: tuple[str, ...],
+    expected_target: Path,
+    supported_release: str,
+    require_version: bool,
+) -> dict[str, Any]:
+    agent_skill = inspect_agent_skill(skill_name, expected_files)
+    for installation in agent_skill["installations"]:
+        installation["unexpected_entries"] = (
+            ["<unsafe-or-unreadable>"]
+            if installation["symlinked"]
+            else unexpected_skill_entries(Path(installation["path"]), expected_files)
+        )
+    structurally_ready = bool(
+        agent_skill["status"] == "configured"
+        and len(agent_skill["installations"]) == 1
+        and Path(agent_skill["installations"][0]["path"]) == expected_target
+        and all(
+            not installation["unexpected_entries"]
+            for installation in agent_skill["installations"]
+        )
+    )
+    version = None
+    if (
+        len(agent_skill["installations"]) == 1
+        and not agent_skill["installations"][0]["symlinked"]
+    ):
+        installation = agent_skill["installations"][0]
+        skill_entry = next(
+            entry for entry in installation["files"] if entry["path"] == "SKILL.md"
+        )
+        if skill_entry["present"] and not skill_entry["symlinked"]:
+            version = frontmatter_version(Path(installation["path"]) / "SKILL.md")
+    version_supported = (
+        version == supported_release.removeprefix("v") if require_version else None
+    )
+    ready = structurally_ready and (version_supported is not False)
+    return {
+        "catalog_status": "active",
+        "setup_supported": True,
+        "installed": ready,
+        "complete_tree_verified": False,
+        "verification_scope": "structure_only",
+        "expected_target": str(expected_target),
+        "supported_release": supported_release,
+        "executable": None,
+        "version": version,
+        "version_supported": version_supported,
+        "status": (
+            "unverifiable"
+            if ready
+            else ("missing" if agent_skill["status"] == "missing" else "degraded")
+        ),
+        "agent_skill": agent_skill,
+        "configuration": [],
+        "probes": {},
+    }
+
+
+def inspect_humanizer() -> dict[str, Any]:
+    return inspect_writing_skill(
+        skill_name="humanizer",
+        expected_files=HUMANIZER_SKILL_FILES,
+        expected_target=Path.home() / ".agents/skills/humanizer",
+        supported_release=HUMANIZER_SUPPORTED_RELEASE,
+        require_version=True,
+    )
+
+
+def effective_writing_skill_root() -> Path:
+    return Path.home() / ".agents" / "skills"
+
+
+def inspect_im_not_ai() -> dict[str, Any]:
+    return inspect_writing_skill(
+        skill_name="humanize-korean",
+        expected_files=HUMANIZE_KOREAN_SKILL_FILES,
+        expected_target=effective_writing_skill_root() / "humanize-korean",
+        supported_release=IM_NOT_AI_SUPPORTED_RELEASE,
+        require_version=False,
+    )
+
+
+def inspect_lora() -> dict[str, Any]:
+    expected_names = ("lore-commits", "lore-query", "lore-setup")
+    skills: dict[str, dict[str, Any]] = {}
+    for name in expected_names:
+        installations: list[dict[str, Any]] = []
+        for root in skill_roots():
+            skill_directory = root.joinpath(name)
+            skill_path = skill_directory.joinpath("SKILL.md")
+            if skill_root_symlinked(root):
+                installations.append(
+                    {
+                        "location": str(skill_directory),
+                        "skill_file_present": False,
+                        "frontmatter_valid": False,
+                        "symlinked": True,
+                    }
+                )
+                continue
+            if not (skill_directory.exists() or skill_directory.is_symlink()):
+                continue
+            skill_file_present, symlinked = safe_skill_file_state(
+                skill_directory, "SKILL.md"
+            )
+            installations.append(
+                {
+                    "location": str(skill_directory),
+                    "skill_file_present": skill_file_present,
+                    "frontmatter_valid": skill_file_present
+                    and frontmatter_name(skill_path) == name,
+                    "symlinked": symlinked,
+                }
+            )
+        skills[name] = {
+            "present": bool(installations),
+            "duplicate": len(installations) > 1,
+            "locations": [entry["location"] for entry in installations],
+            "frontmatter_valid": bool(installations)
+            and all(entry["frontmatter_valid"] for entry in installations),
+            "symlinked": any(entry["symlinked"] for entry in installations),
+            "installations": installations,
+        }
+    required_ready = all(
+        len(skills[name]["installations"]) == 1
+        and skills[name]["installations"][0]["skill_file_present"]
+        and skills[name]["frontmatter_valid"]
+        and not skills[name]["symlinked"]
+        for name in ("lore-commits", "lore-query")
+    )
+    any_present = any(skill["present"] for skill in skills.values())
+    return {
+        "catalog_status": "active",
+        "setup_supported": True,
+        "installed": required_ready,
+        "complete_tree_verified": False,
+        "verification_scope": "structure_only",
+        "executable": None,
+        "version": None,
+        "status": "unverifiable"
+        if required_ready
+        else ("degraded" if any_present else "missing"),
+        "skills": skills,
+        "lore_setup_present": skills["lore-setup"]["present"],
+        "configuration": [],
+        "probes": {},
+    }
+
+
+def inspect_deslop() -> dict[str, Any]:
+    name = "deslop"
+    expected_entries = {"SKILL.md", "LICENSE"}
+    installations: list[dict[str, Any]] = []
+    for root in skill_roots():
+        skill_directory = root.joinpath(name)
+        skill_path = skill_directory.joinpath("SKILL.md")
+        if skill_root_symlinked(root):
+            installations.append(
+                {
+                    "location": str(skill_directory),
+                    "skill_file_present": False,
+                    "license_file_present": False,
+                    "frontmatter_valid": False,
+                    "symlinked": True,
+                    "unexpected_entries": [],
+                }
+            )
+            continue
+        if not (skill_directory.exists() or skill_directory.is_symlink()):
+            continue
+        skill_file_present, skill_symlinked = safe_skill_file_state(
+            skill_directory, "SKILL.md"
+        )
+        license_file_present, license_symlinked = safe_skill_file_state(
+            skill_directory, "LICENSE"
+        )
+        symlinked = skill_symlinked or license_symlinked
+        try:
+            unexpected_entries = sorted(
+                entry.name
+                for entry in skill_directory.iterdir()
+                if entry.name not in expected_entries
+            )
+        except OSError:
+            unexpected_entries = ["<unreadable>"]
+        installations.append(
+            {
+                "location": str(skill_directory),
+                "skill_file_present": skill_file_present,
+                "license_file_present": license_file_present,
+                "frontmatter_valid": skill_file_present
+                and frontmatter_name(skill_path) == name,
+                "symlinked": symlinked,
+                "unexpected_entries": unexpected_entries,
+            }
+        )
+
+    ready = (
+        len(installations) == 1
+        and installations[0]["skill_file_present"]
+        and installations[0]["license_file_present"]
+        and installations[0]["frontmatter_valid"]
+        and not installations[0]["symlinked"]
+        and not installations[0]["unexpected_entries"]
+    )
+    return {
+        "catalog_status": "active",
+        "setup_supported": True,
+        "installed": ready,
+        "complete_tree_verified": False,
+        "verification_scope": "structure_only",
+        "executable": None,
+        "version": None,
+        "status": "unverifiable"
+        if ready
+        else ("degraded" if installations else "missing"),
+        "agent_skill": {
+            "present": bool(installations),
+            "duplicate": len(installations) > 1,
+            "installations": installations,
+        },
+        "configuration": [],
+        "probes": {},
+    }
+
+
+def ouroboros_mcp_registration(
+    repository: Path, ouroboros_executable: str | None
+) -> dict[str, Any]:
+    probe: dict[str, Any] = {
+        "attempted": True,
+        "ok": True,
+        "exit_code": 0,
+        "timed_out": False,
+    }
+    reading = grok_mcp_entries("ouroboros", repository)
+    if reading.get("unverifiable"):
+        probe["reason"] = reading["unverifiable"]
+        return {"status": "unverifiable", "probe": probe}
+    _present, project_symlinked = safe_managed_file_state(
+        repository / ".grok" / "config.toml", repository
+    )
+    if project_symlinked:
+        probe["reason"] = "project_configuration_symlinked"
+        return {"status": "unverifiable", "probe": probe}
+    entry: Any = None
+    scope: str | None = None
+    if reading["scopes"]["project"] is not None:
+        entry = reading["scopes"]["project"]
+        scope = "project"
+    elif reading["scopes"]["user"] is not None:
+        entry = reading["scopes"]["user"]
+        scope = "user"
+    elif reading.get("invalid_scopes") or reading.get("invalid_config"):
+        probe["reason"] = "registration_invalid_toml"
+        return {"status": "degraded", "probe": probe}
+    if entry is None:
+        probe["reason"] = "registration_not_found"
+        return {"status": "missing", "probe": probe}
+    if not isinstance(entry, dict) or entry.get("url"):
+        return {"status": "degraded", "probe": probe, "scope": scope, "reason": "registration_not_stdio"}
+    if entry.get("enabled") is False or "ouroboros" in tuple(reading.get("disabled_servers") or ()):
+        return {"status": "degraded", "probe": probe, "scope": scope, "reason": "registration_disabled"}
+    if ouroboros_direct_launcher_matches(entry, ouroboros_executable):
+        return {"status": "configured", "probe": probe, "scope": scope, "launcher": "direct"}
+    if ouroboros_isolated_launcher_matches(entry):
+        return {"status": "configured", "probe": probe, "scope": scope, "launcher": "isolated"}
+    return {"status": "degraded", "probe": probe, "scope": scope, "reason": "registration_mismatch"}
+
+
+def inspect_ouroboros_host_skills() -> dict[str, Any]:
+    skills = {
+        name: inspect_agent_skill(name, ("SKILL.md",))
+        for name in ("interview", "pm", "seed", "qa")
+    }
+    statuses = [entry["status"] for entry in skills.values()]
+    if all(status == "configured" for status in statuses):
+        status = "configured"
+    elif all(status == "missing" for status in statuses):
+        status = "missing"
+    else:
+        status = "degraded"
+    return {"status": status, "skills": skills}
+
+
+def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any]:
+    tool = base_tool("ooo")
+    tool["supported_range"] = ">=0.51.1,<0.52.0"
+    tool["mcp_registration"] = ouroboros_mcp_registration(repository, tool["executable"])
+    tool["host_integration"] = inspect_ouroboros_host_skills()
+    if not tool["installed"]:
+        tool["version_supported"] = False
+        tool["probes"]["version"] = skipped_probe("executable_missing")
+        tool["mcp_runtime"] = {"status": "missing", "probe": skipped_probe("executable_missing")}
+        tool["status"] = "degraded"
+        return tool
+    version_raw = run_command([tool["executable"], "--version"], repository, timeout_seconds)
+    tool["version"] = ouroboros_version_from_output(
+        f"{version_raw.get('stdout', '')}\n{version_raw.get('stderr', '')}"
+    )
+    tool["version_supported"] = version_raw["ok"] and supported_ouroboros_version(tool["version"])
+    tool["probes"]["version"] = {
+        key: version_raw[key] for key in ("attempted", "ok", "exit_code", "timed_out")
+    }
+    launcher = tool["mcp_registration"].get("launcher")
+    if launcher == "isolated":
+        tool["mcp_runtime"] = {
+            "status": "configured",
+            "reason": "isolated_launcher_contract",
+            "probe": skipped_probe("isolated_environment_not_probed"),
+        }
+    elif launcher == "direct":
+        mcp_doctor = json_probe(
+            [tool["executable"], "mcp", "doctor", "--json"], repository, timeout_seconds
+        )
+        doctor_checks = mcp_doctor.get("result")
+        runtime_probe = normalized_probe(mcp_doctor)
+        if isinstance(doctor_checks, list):
+            failed = sorted(
+                str(check.get("name"))
+                for check in doctor_checks
+                if isinstance(check, dict)
+                and check.get("status") == "fail"
+                and check.get("name") != "mcp_import"
+            )
+            if failed:
+                runtime_probe["reason"] = "doctor_checks_failed"
+            tool["mcp_runtime"] = {
+                "status": "degraded" if failed else "configured",
+                "failed_checks": failed,
+                "probe": runtime_probe,
+            }
+        else:
+            tool["mcp_runtime"] = {"status": "degraded", "probe": runtime_probe}
+    else:
+        reason = tool["mcp_registration"].get("reason", "registration_not_found")
+        tool["mcp_runtime"] = {
+            "status": "missing" if reason == "registration_not_found" else "unverifiable",
+            "reason": reason,
+            "probe": skipped_probe(reason),
+        }
+    components_ready = (
+        tool["version_supported"]
+        and tool["host_integration"]["status"] == "configured"
+        and tool["mcp_runtime"]["status"] == "configured"
+        and tool["mcp_registration"]["status"] == "configured"
+    )
+    tool["status"] = "configured" if components_ready else "degraded"
+    return tool
+
+
+def inspect_podway(repository: Path, timeout_seconds: float) -> dict[str, Any]:
+    tool = base_tool("podway")
+    tool["agent_skill"] = inspect_agent_skill("use-podway", PODWAY_SKILL_FILES)
+    tool["platform"] = {
+        "system": platform.system(),
+        "machine": platform.machine(),
+        "supported": platform.system() == "Darwin"
+        and platform.machine() in {"arm64", "aarch64"},
+    }
+    managed: list[dict[str, Any]] = []
+    legacy_managed: list[dict[str, Any]] = []
+    present_count = 0
+    legacy_present_count = 0
+    tracked_count = 0
+    for name in PODWAY_PROCEDURES:
+        source = PODWAY_SOURCE_DIRECTORY / name
+        target = repository / ".podway" / "procedures" / name
+        relative_path = str(target.relative_to(repository))
+        source_present, source_symlinked = safe_managed_file_state(
+            source, PODWAY_SOURCE_DIRECTORY
+        )
+        present, symlinked = safe_managed_file_state(target, repository)
+        source_digest = file_sha256(source) if source_present else None
+        target_digest = file_sha256(target) if present else None
+        source_bytes = file_bytes(source) if source_present else None
+        target_bytes = file_bytes(target) if present else None
+        matching = (
+            present
+            and not symlinked
+            and source_present
+            and not source_symlinked
+            and source_digest is not None
+            and target_digest == source_digest
+        )
+        workaround = (
+            podway_v025_workaround_bytes(name, source_bytes)
+            if source_bytes is not None
+            else None
+        )
+        if symlinked or source_symlinked:
+            source_state = "unsafe"
+            update_explanation = "unsafe"
+        elif not present:
+            source_state = "missing"
+            update_explanation = "missing"
+        elif not source_present:
+            source_state = "unsafe"
+            update_explanation = "unsafe"
+        elif matching:
+            source_state = "canonical"
+            update_explanation = "current_canonical"
+        elif target_digest in PODWAY_PRIOR_CANONICAL_SHA256[name]:
+            source_state = "pending_validation"
+            update_explanation = "prior_canonical"
+        elif workaround is not None and target_bytes == workaround:
+            source_state = "pending_validation"
+            update_explanation = "podway_v0.2.5_workaround"
+        else:
+            source_state = "pending_validation"
+            update_explanation = "local_customization"
+        tracked = present and tracked_by_git(repository, relative_path, timeout_seconds)
+        present_count += int(present or symlinked)
+        tracked_count += int(tracked)
+        managed.append(
+            {
+                "path": relative_path,
+                "present": present,
+                "symlinked": symlinked,
+                "tracked": tracked,
+                "source_sha256": source_digest,
+                "installed_sha256": target_digest,
+                "matches_source": matching,
+                "source_state": source_state,
+                "update_explanation": update_explanation,
+                "expected_procedure_id": Path(name).stem,
+            }
+        )
+    for name in LEGACY_PODWAY_PROCEDURES:
+        target = repository / ".podway" / "procedures" / name
+        relative_path = str(target.relative_to(repository))
+        present, symlinked = safe_managed_file_state(target, repository)
+        legacy_present_count += int(present or symlinked)
+        legacy_managed.append(
+            {
+                "path": relative_path,
+                "present": present,
+                "symlinked": symlinked,
+                "tracked": present
+                and tracked_by_git(repository, relative_path, timeout_seconds),
+            }
+        )
+    tool["configuration"] = [
+        configuration_entry(repository, ".podway/config.yaml", timeout_seconds),
+        configuration_entry(repository, ".podway/.gitignore", timeout_seconds),
+        configuration_entry(repository, ".podway/runtime/", timeout_seconds),
+    ]
+    tool["managed_procedures"] = managed
+    tool["legacy_managed_procedures"] = legacy_managed
+    tool["migration_kinds"] = {
+        "product_rename": legacy_present_count > 0,
+    }
+    tool["migration_required"] = any(tool["migration_kinds"].values())
+    tool["readiness_status"] = (
+        "not_configured"
+        if present_count == 0 and legacy_present_count == 0
+        else "degraded"
+    )
+    tool["legacy_state_detected"] = False
+    tool["version_supported"] = False
+    tool["daemon_version"] = None
+    tool["versions_match"] = False
+    if not tool["installed"]:
+        for entry in managed:
+            if entry["source_state"] in {"canonical", "pending_validation"}:
+                entry["source_state"] = "unverifiable"
+        tool["probes"]["version"] = skipped_probe("executable_missing")
+        tool["probes"]["daemon_status"] = skipped_probe("executable_missing")
+        tool["probes"]["doctor"] = skipped_probe("executable_missing")
+        tool["probes"]["session_status"] = skipped_probe("executable_missing")
+        if present_count or legacy_present_count:
+            tool["status"] = "degraded"
+            tool["readiness_status"] = "degraded"
+        return tool
+    version_probe = json_probe(
+        [tool["executable"], "version", "--json"], repository, timeout_seconds
+    )
+    tool["probes"]["version"] = normalized_probe(version_probe)
+    tool["version"] = version_from_probe(version_probe)
+    tool["version_supported"] = supported_podway_version(tool["version"])
+
+    daemon_probe = json_probe(
+        [
+            tool["executable"],
+            "--json",
+            "daemon",
+            "wait-ready",
+            "--timeout",
+            "120s",
+        ],
+        repository,
+        max(timeout_seconds, 125.0),
+    )
+    normalized_daemon, daemon_payload = normalize_podway_envelope(
+        daemon_probe,
+        "daemon.wait-ready",
+        ("podway.daemon-status-result/v3",),
+    )
+    daemon_version = None
+    daemon_reachable = False
+    daemon_ready = False
+    daemon_target = None
+    if isinstance(daemon_payload, dict):
+        daemon_schema = daemon_payload.get("schema")
+        observed_daemon_version = daemon_payload.get("daemon_version")
+        daemon_version = (
+            observed_daemon_version
+            if isinstance(observed_daemon_version, str)
+            and re.fullmatch(
+                r"v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?",
+                observed_daemon_version,
+            )
+            else None
+        )
+        daemon_reachable = daemon_payload.get("reachable") is True
+        observed_target = daemon_payload.get("target")
+        daemon_target = (
+            observed_target
+            if observed_target in {"aarch64-apple-darwin", "x86_64-apple-darwin"}
+            else None
+        )
+        readiness_state = None
+        readiness_stage = None
+        readiness_elapsed_ms = None
+        worktree_recovery = None
+        daemon_mode = None
+        if daemon_schema == "podway.daemon-status-result/v3":
+            observed_mode = daemon_payload.get("mode")
+            daemon_mode = (
+                observed_mode
+                if isinstance(observed_mode, str)
+                and len(observed_mode.encode("utf-8")) <= 64
+                and re.fullmatch(r"[a-z](?:[a-z0-9]|-(?=[a-z0-9]))*", observed_mode)
+                else None
+            )
+            observed_state = daemon_payload.get("readiness_state")
+            observed_stage = daemon_payload.get("readiness_stage")
+            observed_elapsed = daemon_payload.get("readiness_elapsed_ms")
+            observed_recovery = daemon_payload.get("worktree_recovery")
+            observed_clients = daemon_payload.get("in_flight_client_count")
+            observed_maintenance = daemon_payload.get("maintenance_operation_count")
+            clients_valid = observed_clients is None or bool(
+                isinstance(observed_clients, int)
+                and not isinstance(observed_clients, bool)
+                and 0 <= observed_clients <= 1024
+            )
+            maintenance_valid = observed_maintenance is None or bool(
+                isinstance(observed_maintenance, int)
+                and not isinstance(observed_maintenance, bool)
+                and 0 <= observed_maintenance <= 10_000
+            )
+            readiness_state = (
+                observed_state
+                if observed_state
+                in {
+                    "not_running",
+                    "unreachable",
+                    "starting",
+                    "recovering",
+                    "ready",
+                    "failed",
+                }
+                else None
+            )
+            readiness_stage = (
+                observed_stage
+                if observed_stage
+                in {"endpoint", "registry", "workspaces", "jobs", "ready", "failed"}
+                else None
+            )
+            readiness_elapsed_ms = (
+                observed_elapsed
+                if isinstance(observed_elapsed, int)
+                and not isinstance(observed_elapsed, bool)
+                and observed_elapsed >= 0
+                else None
+            )
+            if isinstance(observed_recovery, dict):
+                recovery_counts = {
+                    key: observed_recovery.get(key)
+                    for key in ("total", "completed", "failed")
+                }
+                if all(
+                    isinstance(value, int)
+                    and not isinstance(value, bool)
+                    and 0 <= value <= 10_000
+                    for value in recovery_counts.values()
+                ):
+                    worktree_recovery = recovery_counts
+            if readiness_state in {"not_running", "unreachable"}:
+                v3_contract_valid = bool(
+                    daemon_mode == "prod"
+                    and observed_stage is None
+                    and observed_elapsed is None
+                    and observed_recovery is None
+                    and observed_clients is None
+                    and observed_maintenance is None
+                )
+            else:
+                v3_contract_valid = bool(
+                    daemon_mode == "prod"
+                    and readiness_state is not None
+                    and readiness_stage is not None
+                    and readiness_elapsed_ms is not None
+                    and worktree_recovery is not None
+                    and clients_valid
+                    and maintenance_valid
+                )
+            if not v3_contract_valid:
+                normalized_daemon["ok"] = False
+                normalized_daemon["error_code"] = (
+                    "unsupported_daemon_mode"
+                    if daemon_mode is not None and daemon_mode != "prod"
+                    else "invalid_daemon_readiness"
+                )
+            daemon_ready = bool(
+                v3_contract_valid
+                and daemon_reachable
+                and daemon_payload.get("status") == "running"
+                and readiness_state == "ready"
+                and readiness_stage == "ready"
+                and worktree_recovery["completed"] == worktree_recovery["total"]
+            )
+        normalized_daemon["result"] = {
+            "installed": daemon_payload.get("installed") is True,
+            "loaded": daemon_payload.get("loaded") is True,
+            "reachable": daemon_reachable,
+            "running": daemon_payload.get("status") == "running",
+            "version_valid": daemon_version is not None,
+            "target_supported": daemon_target is not None,
+            "ready": daemon_ready,
+            "mode": daemon_mode,
+            "readiness_state": readiness_state,
+            "readiness_stage": readiness_stage,
+            "readiness_elapsed_ms": readiness_elapsed_ms,
+            "worktree_recovery": worktree_recovery,
+        }
+    tool["probes"]["daemon_status"] = normalized_daemon
+    tool["daemon_version"] = daemon_version
+    tool["versions_match"] = (
+        normalized_version(tool["version"]) == normalized_version(daemon_version)
+        if tool["version"] and daemon_version
+        else False
+    )
+
+    initialized = tool["configuration"][0]["present"]
+    session_contract_ok = True
+    if initialized:
+        doctor_probe = json_probe(
+            [tool["executable"], "doctor", "--json"], repository, timeout_seconds
+        )
+        session_probe = json_probe(
+            [tool["executable"], "--json", "status"], repository, timeout_seconds
+        )
+        normalized_doctor, doctor_payload = normalize_podway_envelope(
+            doctor_probe, "workspace.doctor"
+        )
+        normalized_session, session_result = normalize_podway_envelope(
+            session_probe,
+            "session.status",
+            ("podway.status-result/v3", "podway.compact-status-result/v3"),
+        )
+        if isinstance(doctor_payload, dict) and isinstance(
+            doctor_payload.get("healthy"), bool
+        ):
+            normalized_doctor["result"] = {"healthy": doctor_payload["healthy"]}
+        session_payload_valid = False
+        if isinstance(session_result, dict):
+            procedure = session_result.get("procedure")
+            session = session_result.get("session")
+            current = session_result.get("current")
+            node = current.get("node") if isinstance(current, dict) else None
+            normalized_session["result"] = {
+                "procedure_present": isinstance(procedure, dict),
+                "procedure_schema_valid": isinstance(procedure, dict)
+                and procedure.get("schema") == "podway.procedure/v2",
+                "goal_revision": session_result.get("goal_revision")
+                if isinstance(session_result.get("goal_revision"), int)
+                and not isinstance(session_result.get("goal_revision"), bool)
+                else None,
+                "session_present": isinstance(session, dict),
+                "session_lifecycle": session.get("lifecycle")
+                if isinstance(session, dict)
+                and session.get("lifecycle")
+                in {"prepared", "running", "completed", "cancelled", "discarded"}
+                else None,
+                "session_revision": session.get("revision")
+                if isinstance(session, dict)
+                and isinstance(session.get("revision"), int)
+                and not isinstance(session.get("revision"), bool)
+                else None,
+                "current_graph_node_present": isinstance(node, dict)
+                and isinstance(node.get("graph_node_id"), str),
+            }
+            allowed_procedure_ids = {Path(name).stem for name in PODWAY_PROCEDURES}
+            session_payload_valid = bool(
+                isinstance(procedure, dict)
+                and procedure.get("schema") == "podway.procedure/v2"
+                and procedure.get("id") in allowed_procedure_ids
+                and isinstance(procedure.get("version"), str)
+                and re.fullmatch(r"\d+", procedure["version"])
+                and isinstance(procedure.get("digest"), str)
+                and re.fullmatch(r"sha256:[0-9A-Za-z._-]{1,128}", procedure["digest"])
+                and isinstance(session, dict)
+                and isinstance(session.get("id"), str)
+                and re.fullmatch(
+                    r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+                    session["id"],
+                    re.IGNORECASE,
+                )
+                and session.get("lifecycle")
+                in {"prepared", "running", "completed", "cancelled", "discarded"}
+                and isinstance(session.get("revision"), int)
+                and not isinstance(session.get("revision"), bool)
+            )
+        tool["probes"]["doctor"] = normalized_doctor
+        tool["probes"]["session_status"] = normalized_session
+        session_contract_ok = (
+            normalized_session["ok"] and session_payload_valid
+        ) or normalized_session.get("error_code") == "SESSION_NOT_FOUND"
+        tool["legacy_state_detected"] = any(
+            probe.get("error_code") == "LEGACY_PROCEDURE_STATE_UNSUPPORTED"
+            for probe in (normalized_doctor, normalized_session)
+        )
+    else:
+        tool["probes"]["doctor"] = skipped_probe("workspace_not_initialized")
+        tool["probes"]["session_status"] = skipped_probe("workspace_not_initialized")
+
+    valid_managed_count = 0
+    for entry in managed:
+        if entry["source_state"] not in {"canonical", "pending_validation"}:
+            continue
+        check = json_probe(
+            [
+                tool["executable"],
+                "--json",
+                "procedure",
+                "check",
+                "--warnings-as-errors",
+                entry["path"],
+            ],
+            repository,
+            timeout_seconds,
+        )
+        normalized_check, payload = normalize_podway_envelope(
+            check,
+            "procedure.check",
+            ("podway.procedure-diagnostics-result/v1",),
+        )
+        entry["check"] = normalized_check
+        if isinstance(payload, dict):
+            entry["check"]["valid"] = payload.get("valid") is True
+        check_valid = (
+            normalized_check["ok"]
+            and isinstance(payload, dict)
+            and payload.get("valid") is True
+        )
+        preview_payload = None
+        preview_valid = False
+        if check_valid:
+            preview = json_probe(
+                [
+                    tool["executable"],
+                    "--json",
+                    "procedure",
+                    "preview",
+                    entry["path"],
+                ],
+                repository,
+                timeout_seconds,
+            )
+            normalized_preview, preview_payload = normalize_podway_envelope(
+                preview,
+                "procedure.preview",
+                ("podway.procedure-preview-result/v1",),
+            )
+            entry["preview"] = normalized_preview
+            if isinstance(preview_payload, dict):
+                entry["preview"]["admissible"] = (
+                    preview_payload.get("admissible") is True
+                )
+                procedure_id = preview_payload.get("procedure_id")
+                entry["preview"]["procedure_id"] = (
+                    procedure_id if isinstance(procedure_id, str) else None
+                )
+            preview_valid = (
+                normalized_preview["ok"]
+                and isinstance(preview_payload, dict)
+                and preview_payload.get("admissible") is True
+                and preview_payload.get("procedure_id")
+                == entry["expected_procedure_id"]
+            )
+        check_rejected = isinstance(payload, dict) and payload.get("valid") is False
+        preview_rejected = isinstance(preview_payload, dict) and (
+            preview_payload.get("admissible") is False
+            or isinstance(preview_payload.get("procedure_id"), str)
+            and preview_payload["procedure_id"] != entry["expected_procedure_id"]
+        )
+        procedure_valid = check_valid and preview_valid
+        if procedure_valid:
+            entry["source_state"] = (
+                "canonical" if entry["matches_source"] else "valid_customization"
+            )
+            valid_managed_count += 1
+        elif check_rejected or preview_rejected:
+            entry["source_state"] = "invalid"
+        else:
+            entry["source_state"] = "unverifiable"
+
+    doctor_ok = not initialized
+    doctor_payload = tool["probes"]["doctor"].get("result") if initialized else None
+    if initialized:
+        doctor_ok = bool(
+            tool["probes"]["doctor"]["ok"]
+            and isinstance(doctor_payload, dict)
+            and doctor_payload.get("healthy") is True
+        )
+    healthy = (
+        version_probe["ok"]
+        and tool["version_supported"]
+        and tool["platform"]["supported"]
+        and normalized_daemon["ok"]
+        and daemon_ready
+        and daemon_target == "aarch64-apple-darwin"
+        and tool["versions_match"]
+        and doctor_ok
+        and session_contract_ok
+    )
+    if present_count == 0:
+        tool["status"] = "installed" if healthy else "degraded"
+    elif (
+        valid_managed_count == len(PODWAY_PROCEDURES)
+        and tracked_count == len(PODWAY_PROCEDURES)
+        and initialized
+        and tool["configuration"][1]["present"]
+        and healthy
+        and legacy_present_count == 0
+    ):
+        tool["readiness_status"] = "ready"
+        tool["status"] = "configured"
+    else:
+        tool["readiness_status"] = "degraded"
+        tool["status"] = "degraded"
+    return tool
+
+
+def inspect(
+    requested_path: str,
+    timeout_seconds: float,
+    include_podway: bool = False,
+    include_ouroboros: bool = False,
+    require_mulgae_mcp: bool = False,
+) -> dict[str, Any]:
+    repository = resolve_repository(requested_path, timeout_seconds)
+    tools = {
+        "sanho": inspect_sanho(repository, timeout_seconds),
+        "mulgae": inspect_mulgae(
+            repository, timeout_seconds, require_mcp=require_mulgae_mcp
+        ),
+        "gaori": inspect_gaori(repository, timeout_seconds),
+        "lora": inspect_lora(),
+        "deslop": inspect_deslop(),
+        "humanizer": inspect_humanizer(),
+        "im-not-ai": inspect_im_not_ai(),
+    }
+    if include_podway:
+        tools["podway"] = inspect_podway(repository, timeout_seconds)
+    if include_ouroboros:
+        tools["ouroboros"] = inspect_ouroboros(repository, timeout_seconds)
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "repository": repository_inventory(repository, timeout_seconds),
+        "tools": tools,
+    }
+
+
+def parse_arguments() -> argparse.Namespace:
+    parser = JsonArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repository", required=True, help="Path inside the Git worktree to inspect"
+    )
+    parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=10.0,
+        help="Timeout for each read-only command",
+    )
+    parser.add_argument(
+        "--include-podway",
+        action="store_true",
+        help="Include explicitly requested Podway readiness diagnostics",
+    )
+    parser.add_argument(
+        "--include-ouroboros",
+        action="store_true",
+        help="Include explicitly requested Ouroboros integration diagnostics",
+    )
+    parser.add_argument(
+        "--require-mulgae-mcp",
+        action="store_true",
+        help="Require an explicitly selected Mulgae MCP registration for status",
+    )
+    arguments = parser.parse_args()
+    if (
+        not math.isfinite(arguments.timeout_seconds)
+        or arguments.timeout_seconds <= 0
+        or arguments.timeout_seconds > MAX_COMMAND_TIMEOUT_SECONDS
+    ):
+        raise InspectionError(
+            "invalid_arguments",
+            f"--timeout-seconds must be greater than zero and at most {MAX_COMMAND_TIMEOUT_SECONDS:g}",
+        )
+    return arguments
+
+
+def emit(payload: dict[str, Any]) -> None:
+    json.dump(payload, sys.stdout, indent=2, sort_keys=True)
+    sys.stdout.write("\n")
+
+
+def main() -> int:
+    try:
+        arguments = parse_arguments()
+        emit(
+            inspect(
+                arguments.repository,
+                arguments.timeout_seconds,
+                include_podway=arguments.include_podway,
+                include_ouroboros=arguments.include_ouroboros,
+                require_mulgae_mcp=arguments.require_mulgae_mcp,
+            )
+        )
+        return 0
+    except InspectionError as error:
+        emit(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "error": {"code": error.code, "message": str(error)},
+            }
+        )
+        return error.exit_code
+    except Exception as error:  # noqa: BLE001 - keep the CLI error boundary JSON-only
+        emit(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "error": {
+                    "code": "inspection_failed",
+                    "message": "unexpected local inspection failure",
+                    "type": type(error).__name__,
+                },
+            }
+        )
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
