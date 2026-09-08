@@ -45,7 +45,7 @@ class GrokMcpInspectionTests(unittest.TestCase):
             self.assertIsNone(result["scopes"]["user"])
             self.assertIsNone(result["scopes"]["project"])
 
-    def test_skill_roots_include_grok_agents_and_cursor(self) -> None:
+    def test_skill_roots_include_grok_and_agents(self) -> None:
         inspect_tools = load_inspect_tools()
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
@@ -57,7 +57,7 @@ class GrokMcpInspectionTests(unittest.TestCase):
             self.assertIn(str(home / ".grok/skills"), roots)
             self.assertIn(str(home / ".agents/skills"), roots)
             self.assertNotIn(str(home / ".claude/skills"), roots)
-            self.assertIn(str(home / ".cursor/skills"), roots)
+            self.assertNotIn(str(home / ".cursor/skills"), roots)
 
     def test_skill_roots_use_grok_home_instead_of_default_home(self) -> None:
         inspect_tools = load_inspect_tools()

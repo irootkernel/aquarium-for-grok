@@ -68,7 +68,7 @@
     "references/tool-catalog.md": "e8edd57853ed026db7334bc36b764055e71d6f492490113b1edf5805b27a8598",
     "skills/dev-setup/SKILL.md": "41b172ee90be4936b6c17eb87a16479a24b4531c575612464fd7dd82371074e0",
     "skills/dev-setup/references/agents-guidance.md": "d535360bebc87a0c872adeee5d7a1bcd1bc2bdc531c655334548c7d2e1ef99c6",
-    "skills/dev-setup/scripts/inspect_tools.py": "9020cf1be12ceb960c7c42c03d676d40b19eb7cb9af38324e81af85957f78c65",
+    "skills/dev-setup/scripts/inspect_tools.py": "b49ec17414f654b1255b0010b1c4297584554e6e7fe67837e482cc88fffc113e",
     "skills/dev-setup-bundle/SKILL.md": "bb0c6580fc5ac33815bcd50a4100a3ae76f0e7aff43724202c3e95cff792a9bd",
     "skills/dev-setup-bundle/references/manifest.md": "98d52f98c480425410ae18a02e285c90b834f87a73a3390f375687b33909f26b",
     "skills/dev-setup-bundle/scripts/normalize_manifest.py": "e5a7b068c46066f10390027fc4393717a76864b26b365846d685fd33b1d0cd99",

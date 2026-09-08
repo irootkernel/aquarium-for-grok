@@ -2430,10 +2430,7 @@ def skill_roots() -> list[Path]:
     else:
         candidates.append(Path.home().joinpath(".grok/skills"))
     candidates.extend(
-        [
-            Path.home().joinpath(".agents/skills"),
-            Path.home().joinpath(".cursor/skills"),
-        ]
+        [Path.home().joinpath(".agents/skills")]
     )
     roots: list[Path] = []
     for candidate in candidates:
