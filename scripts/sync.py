@@ -242,7 +242,6 @@ SCRIPT_SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "    candidates.extend(\n"
         "        [\n"
         '            Path.home().joinpath(".agents/skills"),\n'
-        '            Path.home().joinpath(".claude/skills"),\n'
         '            Path.home().joinpath(".cursor/skills"),\n'
         "        ]\n"
         "    )\n",
@@ -351,7 +350,6 @@ RULE_TABLES: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
 REQUIRED_TEXT: tuple[tuple[str, str], ...] = (
     ("skills/dev-setup/scripts/inspect_tools.py", '".grok/skills"'),
     ("skills/dev-setup/scripts/inspect_tools.py", '".agents/skills"'),
-    ("skills/dev-setup/scripts/inspect_tools.py", '".claude/skills"'),
     ("skills/dev-setup/scripts/inspect_tools.py", '".cursor/skills"'),
     ("skills/dev-setup/scripts/inspect_tools.py", 'Path.home() / ".grok"'),
     ("skills/dev-setup/scripts/inspect_tools.py", "GROK_HOME"),

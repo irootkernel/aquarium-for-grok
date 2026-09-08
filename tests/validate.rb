@@ -271,7 +271,6 @@ assert(
 REQUIRED_TEXT = [
   ["skills/dev-setup/scripts/inspect_tools.py", '".grok/skills"'],
   ["skills/dev-setup/scripts/inspect_tools.py", '".agents/skills"'],
-  ["skills/dev-setup/scripts/inspect_tools.py", '".claude/skills"'],
   ["skills/dev-setup/scripts/inspect_tools.py", '".cursor/skills"'],
   ["skills/dev-setup/scripts/inspect_tools.py", 'Path.home() / ".grok"'],
   ["skills/dev-setup/scripts/inspect_tools.py", "GROK_HOME"],
@@ -343,7 +342,7 @@ if inspection.file?
   script = inspection.read
   assert(script.include?('".grok/skills"'), "inspection must search the Grok skill root")
   assert(script.include?('".agents/skills"'), "inspection must search the shared agent skill root")
-  assert(script.include?('".claude/skills"'), "inspection must search the Claude skill root")
+  assert(!script.include?('".claude/skills"'), "inspection must not search the Claude skill root")
   assert(script.include?('".cursor/skills"'), "inspection must search the Cursor skill root")
   assert(script.include?("disabled_mcp_servers"), "inspection must honour grok mcp disable")
   assert(script.include?("inspect_ouroboros_host_skills"), "inspection must diagnose installed Ouroboros host skills")

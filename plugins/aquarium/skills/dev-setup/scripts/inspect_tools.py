@@ -2432,7 +2432,6 @@ def skill_roots() -> list[Path]:
     candidates.extend(
         [
             Path.home().joinpath(".agents/skills"),
-            Path.home().joinpath(".claude/skills"),
             Path.home().joinpath(".cursor/skills"),
         ]
     )
