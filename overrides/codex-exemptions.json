@@ -1,14 +1,10 @@
 {
-  "skills/aquarium-dev/SKILL.md": {
-    "source": "fd7c8b0572d23c844e3dcaaa4edb8da39d7d4f284a807392d3a804716ee28419",
-    "shipped": "563af3976124832a0606b295c94754aa8cd22928f229cd4504334b3924ec57e4"
-  },
-  "skills/aquarium-dev/references/development-contract.md": {
-    "source": "f038da75f773415250f2a56d3fd2f0369bbb82b2eec0c5496bd44feafb858f6b",
+  "references/development-contract.md": {
+    "source": "99c3ef3899c1d4a3750601cdbe1dead6643de7b05fe634de92df050ca165f8d3",
     "shipped": "ce38bed06f4319d7c56aad89d9e151a34c7aaef081d9b9350752f2c2dcf6fb37"
   },
-  "skills/dev-setup/references/tool-catalog.md": {
-    "source": "8e736eb57cc943563a2ac99c3cbf0d6ce9628ceb92eaf2e6ecc4d34a14c02dd0",
-    "shipped": "5c78370a2a09c144243ca875179a3a614e89b3922b690742bfa5072d242e0e2b"
+  "references/tool-catalog.md": {
+    "source": "e8edd57853ed026db7334bc36b764055e71d6f492490113b1edf5805b27a8598",
+    "shipped": "97d22e76d3a5d7334e333a223c973b96ecbc43916a6ef09807717613436bf83c"
   }
 }

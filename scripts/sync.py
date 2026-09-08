@@ -32,11 +32,18 @@ CODEX_EXEMPTIONS = OVERRIDES / "codex-exemptions.json"
 ADDITIONS = REPOSITORY / "additions"
 SYNC_MANIFEST = "sync-manifest.json"
 
-COPIED_DIRECTORIES = ("skills", "references", "assets", "hooks")
+COPIED_DIRECTORIES = ("skills", "references", "assets", "hooks", "tools")
+COPIED_ROOT_FILES = (".mcp.json",)
 TEXT_SUFFIXES = (".md",)
 SCRIPT_SUFFIXES = (".py",)
 DATA_SUFFIXES = (".json", ".yaml")
 SCANNED_SUFFIXES = TEXT_SUFFIXES + SCRIPT_SUFFIXES + DATA_SUFFIXES
+# tools/ ships a suffix-less launcher and a hash-pinned requirements file.
+# Those bytes are not host-rewritten; scanning them would force a global
+# suffix expansion that then misses host needles in the rest of the tree.
+UNSCANNED_SHIPPED_PREFIXES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("tools/", ("", ".txt")),
+)
 
 ADDED_PATHS: tuple[str, ...] = (
     "agents/independent-reviewer.md",
@@ -77,7 +84,7 @@ EXCLUDED_FILES: tuple[tuple[str, str], ...] = (
         "the Dolgorae capture contract; this edition's independent review dispatches Grok subagents",
     ),
     (
-        "skills/dev-setup/scripts/verify_dolgorae_release.py",
+        "skills/dev-setup-global/scripts/verify_dolgorae_release.py",
         "Dolgorae GitHub release verification; this edition does not diagnose Dolgorae",
     ),
 )
@@ -89,6 +96,16 @@ SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "Never stage paths merely to manufacture an Orca Review target.",
         "`workspace` and `dirty` remain outside this workflow. "
         "Never stage paths merely to manufacture an Orca Review target.",
+    ),
+    (
+        "Dolgorae remains unenrolled until its repository creates and validates the approved "
+        "producer commit, enrolls that canonical checkout, and publishes the exact committed "
+        "generation. Before enrollment, the launcher resolves the required global Dolgorae; "
+        "if neither generation exists, it fails closed and requests `$aquarium:dev-setup-global`.",
+        "Dolgorae remains an optional development producer until its repository creates and "
+        "validates the approved producer commit, enrolls that canonical checkout, and publishes "
+        "the exact committed generation. A missing global Dolgorae is not fail-closed readiness "
+        "and is not diagnosed or installed by `/aquarium:dev-setup-global`.",
     ),
     ("$aquarium:", "/aquarium:"),
     (
@@ -109,15 +126,13 @@ SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "Use structured `ask_user_question` when available and ask all three questions together",
     ),
     ("`request_user_input`", "`ask_user_question`"),
-    ("are Codex goals recorded", "are Grok todo entries recorded"),
     ("Codex goal", "Grok todo list"),
-    (
-        "mirror only the current actionable goal into the host goal mechanism",
-        "mirror only the current actionable goal into the Grok todo list via `todo_write`",
-    ),
     ("fresh Codex audit", "fresh from-scratch audit"),
     ("Codex skill health", "Grok skill health"),
-    ("Codex and runtime components", "host integration and runtime components"),
+    ("Codex home", "Grok home"),
+    ("Codex objective", "Grok todo-list objective"),
+    ("Codex tool contract", "Grok todo-list contract"),
+    ("Restart Codex", "Restart Grok"),
     (
         "Use the available agent delegation surface to dispatch fresh subagents for independent risk clusters.",
         "Use `spawn_subagent` to dispatch fresh subagents for independent risk clusters.",
@@ -127,50 +142,12 @@ SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "Parallelize independent clusters by launching their workers in a single message with `background: true` when capacity allows, without weakening isolation, and collect each result through `get_command_or_subagent_output`.",
     ),
     (
-        "Until Dolgorae is enrolled, the launcher admits it through global fallback only. "
-        "If neither development nor global Dolgorae exists, the invocation fails closed "
-        "and requests `/aquarium:dev-setup`; there is no Dolgorae exception. "
-        "Sanho alone is excluded from the required global-binary baseline.",
-        "Dolgorae remains an optional development producer. The launcher admits it when a "
-        "selected generation exists or a global `dolgorae` is on PATH; a missing Dolgorae "
-        "is not fail-closed readiness and is not diagnosed or installed by `/aquarium:dev-setup`. "
-        "Sanho remains excluded from the required global-binary baseline.",
+        "  tools: [dolgorae, mulgae, gaori, sorage, podway, ouroboros, lora, deslop, humanizer, im-not-ai]",
+        "  tools: [mulgae, gaori, sorage, podway, ouroboros, lora, deslop, humanizer, im-not-ai]",
     ),
     (
-        "Dolgorae remains unenrolled until its repository creates and validates the approved "
-        "producer commit, enrolls that canonical checkout, and publishes the exact committed "
-        "generation. Before enrollment, the launcher resolves the required global Dolgorae; "
-        "if neither generation exists, it fails closed and requests `/aquarium:dev-setup`.",
-        "Dolgorae remains an optional development producer until its repository creates and "
-        "validates the approved producer commit, enrolls that canonical checkout, and publishes "
-        "the exact committed generation. A missing global Dolgorae is not fail-closed readiness "
-        "and is not diagnosed or installed by `/aquarium:dev-setup`.",
-    ),
-    (
-        "  tools: [dolgorae, mulgae, gaori, podway, ouroboros, lora, deslop, humanizer, im-not-ai]",
-        "  tools: [mulgae, gaori, podway, ouroboros, lora, deslop, humanizer, im-not-ai]",
-    ),
-    (
-        "Supported tools are `sanho`, `dolgorae`, `mulgae`, `gaori`, `podway`, `ouroboros`, `lora`, `deslop`, `humanizer`, and `im-not-ai`.",
-        "Supported tools are `sanho`, `mulgae`, `gaori`, `podway`, `ouroboros`, `lora`, `deslop`, `humanizer`, and `im-not-ai`. This edition does not accept `dolgorae`.",
-    ),
-    (
-        "5. Run the existing `inspect_tools.py` once for each ready target with `--verify-dolgorae-release`, `--include-podway`, `--include-ouroboros`, and `--require-mulgae-mcp` only when the normalized selection requires those dimensions.",
-        "5. Run the existing `inspect_tools.py` once for each ready target with `--include-podway`, `--include-ouroboros`, and `--require-mulgae-mcp` only when the normalized selection requires those dimensions.",
-    ),
-    (
-        "Disclose that confirming a selection containing Dolgorae authorizes its bounded official GitHub Release metadata lookup, while Sanho, Mulgae, Gaori, or Podway also authorize the raw-file freshness comparison defined by `dev-setup`. Neither selection authorizes an archive download, installation, or replacement.",
-        "Disclose that confirming a selection containing Sanho, Mulgae, Gaori, or Podway authorizes the raw-file freshness comparison defined by `dev-setup`. That selection authorizes no archive download, installation, or replacement.",
-    ),
-    (
-        "Resolve the union of effective tools across ready targets. Resolve selected Dolgorae release metadata once. Compare each selected Sanho, Mulgae, Gaori, or Podway paired skill once",
-        "Resolve the union of effective tools across ready targets. Compare each selected Sanho, Mulgae, Gaori, or Podway paired skill once",
-    ),
-    ("configure Codex", "configure Grok"),
-    ("Codex configuration", "Grok configuration"),
-    (
-        "are never installed into a Codex home by this workflow",
-        "are never installed into any host's plugin home by this workflow",
+        "Supported tools are `sanho`, `dolgorae`, `mulgae`, `gaori`, `sorage`, `podway`, `ouroboros`, `lora`, `deslop`, `humanizer`, and `im-not-ai`.",
+        "Supported tools are `sanho`, `mulgae`, `gaori`, `sorage`, `podway`, `ouroboros`, `lora`, `deslop`, `humanizer`, and `im-not-ai`. This edition does not accept `dolgorae`.",
     ),
     (
         "The bundled hook is a local guardrail, not complete enforcement: it detects direct shell `git commit` invocations in roadmap repositories, while indirect commits performed by other tools may not pass through that boundary.",
@@ -187,17 +164,29 @@ SCRIPT_SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "from pathlib import Path\n"
         "from typing import Any\n"
         "\n"
-        "SCRIPT_DIRECTORY = str(Path(__file__).resolve().parent)\n"
-        "if SCRIPT_DIRECTORY not in sys.path:\n"
-        "    sys.path.insert(0, SCRIPT_DIRECTORY)\n"
+        "GLOBAL_SCRIPT_DIRECTORY = str(\n"
+        '    Path(__file__).resolve().parents[2] / "dev-setup-global/scripts"\n'
+        ")\n"
+        "if GLOBAL_SCRIPT_DIRECTORY not in sys.path:\n"
+        "    sys.path.insert(0, GLOBAL_SCRIPT_DIRECTORY)\n"
         "\n"
-        "import verify_dolgorae_release as dolgorae_release\n",
+        "try:\n"
+        "    import verify_dolgorae_release as dolgorae_release\n"
+        "except ModuleNotFoundError as error:\n"
+        '    if error.name != "verify_dolgorae_release":\n'
+        "        raise\n"
+        "    dolgorae_release = None\n",
         "import shutil\n"
         "import subprocess\n"
         "import sys\n"
         "from pathlib import Path\n"
         "from typing import Any\n",
     ),
+    ("InvalidCodexHome", "InvalidHostHome"),
+    ("per-Codex-home", "per-Grok-home"),
+    ("Ouroboros Codex home", "Ouroboros Grok home"),
+    ("Codex home", "Grok home"),
+    ("configures Codex", "configures Grok"),
     (
         "    environment = os.environ.copy()\n"
         "    for name in tuple(environment):\n"
@@ -227,9 +216,21 @@ SCRIPT_SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         '    "mulgae",\n',
     ),
     (
+        "DOLGORAE_SKILL_FILES = (\n"
+        '    "SKILL.md",\n'
+        '    "references/configuration.md",\n'
+        '    "references/lifecycle.md",\n'
+        '    "references/recovery.md",\n'
+        ")\n",
+        "",
+    ),
+    (
         '    codex_home = os.environ.get("CODEX_HOME")\n'
         "    if codex_home:\n"
-        '        candidates.append(Path(codex_home).expanduser().joinpath("skills"))\n'
+        "        try:\n"
+        '            candidates.append(Path(codex_home).expanduser().joinpath("skills"))\n'
+        "        except (OSError, ValueError, RuntimeError):\n"
+        "            pass\n"
         "    candidates.extend(\n"
         '        [Path.home().joinpath(".codex/skills"), Path.home().joinpath(".agents/skills")]\n'
         "    )\n",
@@ -354,7 +355,12 @@ REQUIRED_TEXT: tuple[tuple[str, str], ...] = (
     ("skills/dev-setup/scripts/inspect_tools.py", '".cursor/skills"'),
     ("skills/dev-setup/scripts/inspect_tools.py", 'Path.home() / ".grok"'),
     ("skills/dev-setup/scripts/inspect_tools.py", "GROK_HOME"),
+    ("skills/dev-setup/scripts/inspect_tools.py", '".agents/skills/humanize-korean"'),
     ("skills/dev-setup/scripts/inspect_tools.py", "grok_mcp_entries"),
+    ("skills/dev-setup-global/scripts/inspect_global_tools.py", "grok_mcp_scopes"),
+    ("skills/dev-setup-global/scripts/inspect_global_tools.py", "--grok-home"),
+    ("skills/dev-setup-global/scripts/inspect_ouroboros.py", "GROK_HOME"),
+    ("skills/dev-setup-global/scripts/inspect_ouroboros.py", 'Path.home() / ".grok"'),
     ("skills/dev-setup/scripts/inspect_tools.py", "disabled_mcp_servers"),
     ("skills/dev-setup/scripts/inspect_tools.py", '"host_integration"'),
     ("skills/dev-setup/scripts/inspect_tools.py", "inspect_ouroboros_host_skills"),
@@ -414,6 +420,8 @@ SIGIL = re.compile(r"\$[a-z][a-z0-9:_-]*")
 SIGIL_LITERALS: tuple[str, ...] = (
     "$aquarium_commit_name",
     "$aquarium_commit_email",
+    "$aquarium_dev_branch",
+    "$aquarium_dev_branch_status",
 )
 
 
@@ -887,7 +895,7 @@ def inspect_ouroboros_host_skills() -> dict[str, Any]:
 
 def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any]:
     tool = base_tool("ooo")
-    tool["supported_range"] = ">=0.51.1,<0.52.0"
+    tool["supported_range"] = ">=0.51.1,<0.54.0"
     tool["mcp_registration"] = ouroboros_mcp_registration(repository, tool["executable"])
     tool["host_integration"] = inspect_ouroboros_host_skills()
     if not tool["installed"]:
@@ -967,28 +975,64 @@ def inspect_im_not_ai() -> dict[str, Any]:
     requested_path: str,
     timeout_seconds: float,
     include_podway: bool = False,
-    include_ouroboros: bool = False,
+    include_sorage: bool = False,
     require_mulgae_mcp: bool = False,
 ) -> dict[str, Any]:
     repository = resolve_repository(requested_path, timeout_seconds)
+    trusted_global_skills = {
+        name: {
+            "canonical_path": str(path),
+            "present": path.exists(),
+            "verification_scope": "presence_only",
+        }
+        for name, path in {
+            "use-sanho": Path.home() / ".agents/skills/use-sanho",
+            "use-mulgae": Path.home() / ".agents/skills/use-mulgae",
+            "use-gaori": Path.home() / ".agents/skills/use-gaori",
+            "use-gaori-status": Path.home() / ".agents/skills/use-gaori-status",
+            "use-sorage": Path.home() / ".agents/skills/use-sorage",
+            "use-podway": Path.home() / ".agents/skills/use-podway",
+            "lore-commits": Path.home() / ".agents/skills/lore-commits",
+            "lore-query": Path.home() / ".agents/skills/lore-query",
+            "deslop": Path.home() / ".agents/skills/deslop",
+            "humanizer": Path.home() / ".agents/skills/humanizer",
+            "humanize-korean": Path.home() / ".agents/skills/humanize-korean",
+        }.items()
+    }
     tools = {
-        "sanho": inspect_sanho(repository, timeout_seconds),
-        "mulgae": inspect_mulgae(
-            repository, timeout_seconds, require_mcp=require_mulgae_mcp
+        "sanho": inspect_sanho(
+            repository,
+            timeout_seconds,
+            agent_skill=trusted_global_skills.get("use-sanho"),
         ),
-        "gaori": inspect_gaori(repository, timeout_seconds),
-        "lora": inspect_lora(),
-        "deslop": inspect_deslop(),
-        "humanizer": inspect_humanizer(),
-        "im-not-ai": inspect_im_not_ai(),
+        "mulgae": inspect_mulgae(
+            repository,
+            timeout_seconds,
+            require_mcp=require_mulgae_mcp,
+            agent_skill=trusted_global_skills.get("use-mulgae"),
+        ),
+        "gaori": inspect_gaori(
+            repository,
+            timeout_seconds,
+            agent_skill=trusted_global_skills.get("use-gaori"),
+        ),
+        "sorage": inspect_sorage(
+            repository,
+            timeout_seconds,
+            include_readiness=include_sorage,
+            agent_skill=trusted_global_skills.get("use-sorage"),
+        ),
     }
     if include_podway:
-        tools["podway"] = inspect_podway(repository, timeout_seconds)
-    if include_ouroboros:
-        tools["ouroboros"] = inspect_ouroboros(repository, timeout_seconds)
+        tools["podway"] = inspect_podway(
+            repository,
+            timeout_seconds,
+            agent_skill=trusted_global_skills["use-podway"],
+        )
     return {
         "schema_version": SCHEMA_VERSION,
         "repository": repository_inventory(repository, timeout_seconds),
+        "trusted_global_skills": trusted_global_skills,
         "tools": tools,
     }
 ''',
@@ -1004,14 +1048,14 @@ def inspect_im_not_ai() -> dict[str, Any]:
         help="Timeout for each read-only command",
     )
     parser.add_argument(
+        "--include-sorage",
+        action="store_true",
+        help="Include explicitly selected Sorage readiness diagnostics",
+    )
+    parser.add_argument(
         "--include-podway",
         action="store_true",
         help="Include explicitly requested Podway readiness diagnostics",
-    )
-    parser.add_argument(
-        "--include-ouroboros",
-        action="store_true",
-        help="Include explicitly requested Ouroboros integration diagnostics",
     )
     parser.add_argument(
         "--require-mulgae-mcp",
@@ -1038,7 +1082,7 @@ def inspect_im_not_ai() -> dict[str, Any]:
                 arguments.repository,
                 arguments.timeout_seconds,
                 include_podway=arguments.include_podway,
-                include_ouroboros=arguments.include_ouroboros,
+                include_sorage=arguments.include_sorage,
                 require_mulgae_mcp=arguments.require_mulgae_mcp,
             )
         )
@@ -1086,12 +1130,12 @@ def inspect_im_not_ai() -> dict[str, Any]:
             "inspect_mulgae_mcp": "4fa6e9beab6d1a963e2e8d652bbb893ac638190c849d1a08547c6a5f77d85db0",
             "inspect_gaori_mcp": "b6c0dc1d71c77f5ba85afdb2f9eb3e1640674e5721888c99e5a0ef0525a7b9f1",
             "ouroboros_direct_launcher_matches": "cd3da17085733d6f01f0b9f53ff6f9d2c46ed1f298ae9dc93cdc292f4b915fea",
-            "ouroboros_isolated_launcher_matches": "1e1aef40c68e4dae80e89e837674e2cd847dcdd6710545f4207d3c4e91ebfe05",
-            "inspect_ouroboros": "17bc1b9df0942909e56676cb4126740a89591e1d7f685f614f6fd99a9928fe2a",
-            "inspect_im_not_ai": "c637d0a07f326954e59b1ffc7f2edfb98ae57d98da56952798a00c8b6ce8c833",
-            "inspect": "38c051d49d427f9f2e6bd2164f1949dff9521eeabaf5b4c3d8cb316fca83f3fd",
-            "parse_arguments": "7821139ce7b7733bc81197d636dcac72661a713cca0b997c3b35aab74f1aaf45",
-            "main": "ee32da15a9eff726cc606171c91b0cae1cd37b37e0a6a23219aa19ad34175289",
+            "ouroboros_isolated_launcher_matches": "ef4368b2f583ba6c88f652e3a59b3f6fa4661dc71f4f77fa1a697c2810913e91",
+            "inspect_ouroboros": "c4100d090e7925b477cf06754096718ca0f84018f6965c0061c31ccc5511ed0b",
+            "inspect_im_not_ai": "a1b5eb4cf6c695ca4ba9ed634e8541efe5b6a75a0ccd805b09bf75fa3410d732",
+            "inspect": "535bec1ec459a9ac10ae7ac6a7e1117dfd83fd44113b6812645db0bb50f85eae",
+            "parse_arguments": "0f84de4e9a220dfe9d3aca4c479d645328cdd269c5575ff696bfab743bfe9d45",
+            "main": "95951cea212f2e20a49bbccc9888215df2a2b128755684fbd17396550b234c71",
         },
     },
     "skills/independent-review/scripts/inspect_review_target.py": {
@@ -1164,6 +1208,480 @@ def inspect_im_not_ai() -> dict[str, Any]:
             "decode_utf8": "bc781a8e73057b49fd664176e63388d32d5efd0c2dc8878107f7779e733939c7",
             "inspect_staged": "b1b1e30ac1bb575a9188007586ca67102ce388d51ada71154c7d818b8d11f050",
             "main": "9b2a1ef445a0fce8965a75dda1e63654a6e29b8b4812c6f2c8c53d0a831fef1c",
+        },
+    },
+    "skills/dev-setup-global/scripts/inspect_global_tools.py": {
+        "replace": {
+            "inspect_global_mcp": r'''def inspect_global_mcp(
+    inspector: Any,
+    name: str,
+    executable: str | None,
+    root: Path,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    del timeout_seconds
+    scopes = inspector.grok_mcp_scopes(name, root, executable)
+    global_registration = scopes.get("global")
+    if isinstance(global_registration, dict):
+        return global_registration
+    reason = scopes.get("reason") or "registration_unavailable"
+    return {"status": scopes.get("status", "unverifiable"), "reason": reason}
+''',
+            "inspect_global": r'''def inspect_global(
+    repository: str | None,
+    timeout_seconds: float,
+    include_sorage_initialization: bool = False,
+    components: tuple[str, ...] | None = None,
+    grok_homes: tuple[str, ...] = (),
+    verify_ouroboros_release: bool = False,
+) -> dict[str, Any]:
+    inspector = load_inspector()
+    root = resolve_working_directory(repository)
+    neutral_cwd = Path(root.anchor)
+    requested_components = set(components or GLOBAL_COMPONENTS)
+    selected_components = tuple(
+        name for name in GLOBAL_COMPONENTS if name in requested_components
+    )
+    raw_tools: dict[str, dict[str, Any]] = {}
+    if "sanho" in requested_components:
+        raw_tools["sanho"] = inspect_versioned_cli(
+            inspector,
+            "sanho",
+            neutral_cwd,
+            timeout_seconds,
+            ["version", "--json"],
+            inspector.supported_sanho_version,
+        )
+    if "mulgae" in requested_components:
+        raw_tools["mulgae"] = inspect_versioned_cli(
+            inspector,
+            "mulgae",
+            neutral_cwd,
+            timeout_seconds,
+            ["version", "--json"],
+            inspector.supported_mulgae_version,
+            platform_required=True,
+        )
+    if "gaori" in requested_components:
+        raw_tools["gaori"] = inspect_versioned_cli(
+            inspector,
+            "gaori",
+            neutral_cwd,
+            timeout_seconds,
+            ["version", "--json"],
+            inspector.supported_gaori_version,
+        )
+    if "sorage" in requested_components:
+        raw_tools["sorage"] = inspect_global_sorage(
+            inspector,
+            root,
+            timeout_seconds,
+            include_sorage_initialization,
+        )
+    if "podway" in requested_components:
+        raw_tools["podway"] = inspect_global_podway(inspector, root, timeout_seconds)
+    skill_specs = {
+        "sanho": ("use-sanho", inspector.SANHO_SKILL_FILES),
+        "mulgae": ("use-mulgae", inspector.MULGAE_SKILL_FILES),
+        "gaori": ("use-gaori", inspector.GAORI_SKILL_FILES),
+        "sorage": ("use-sorage", inspector.SORAGE_SKILL_FILES),
+    }
+    for name, (skill_name, files) in skill_specs.items():
+        if name not in raw_tools:
+            continue
+        raw_tools[name]["agent_skill"] = inspect_canonical_agent_skill(
+            inspector, skill_name, files
+        )
+    if "gaori" in raw_tools:
+        raw_tools["gaori"]["status_skill"] = inspect_canonical_agent_skill(
+            inspector, "use-gaori-status", inspector.GAORI_STATUS_SKILL_FILES
+        )
+    if "mulgae" in raw_tools:
+        raw_tools["mulgae"]["installation_prerequisites"] = (
+            inspector.inspect_mulgae_installation_prerequisites(
+                neutral_cwd,
+                timeout_seconds,
+                environment_overrides={"GOTOOLCHAIN": "local"},
+            )
+        )
+    for name in ("mulgae", "gaori"):
+        if name not in raw_tools:
+            continue
+        raw_tools[name]["global_mcp"] = inspect_global_mcp(
+            inspector,
+            name,
+            raw_tools[name]["executable"],
+            root,
+            timeout_seconds,
+        )
+    tools: dict[str, Any] = {}
+    for name, raw in raw_tools.items():
+        entry: dict[str, Any] = {"cli": cli_component(raw)}
+        if "agent_skill" in raw:
+            entry["paired_skill"] = raw["agent_skill"]
+        if "status_skill" in raw:
+            entry["status_skill"] = raw["status_skill"]
+        if "global_mcp" in raw:
+            entry["global_mcp"] = raw["global_mcp"]
+        if "installation_prerequisites" in raw:
+            entry["installation_prerequisites"] = raw["installation_prerequisites"]
+        if name == "podway":
+            entry["daemon"] = raw["daemon"]
+        if name == "sorage":
+            entry["initialization_status"] = raw.get("initialization_status")
+            entry["initialization_probe"] = raw["probes"]["doctor"]
+        tools[name] = entry
+
+    if "ouroboros" in requested_components:
+        try:
+            tools["ouroboros"] = inspect_ouroboros(
+                inspector,
+                neutral_cwd,
+                timeout_seconds,
+                grok_homes,
+                verify_ouroboros_release,
+            )
+        except InvalidHostHome as error:
+            raise InspectionError(
+                "invalid_grok_home", "Grok home is unavailable or invalid"
+            ) from error
+    if "lora" in requested_components:
+        tools["lora"] = inspector.inspect_lora()
+    if "deslop" in requested_components:
+        tools["deslop"] = inspector.inspect_deslop()
+    if "humanizer" in requested_components:
+        tools["humanizer"] = inspector.inspect_humanizer()
+    if "im-not-ai" in requested_components:
+        tools["im-not-ai"] = inspector.inspect_im_not_ai()
+    if "aquarium-dev" in requested_components:
+        script = Path(__file__).resolve().parents[3] / "tools/aquarium-dev/install.py"
+        try:
+            probe = subprocess.run(
+                [sys.executable, "-B", str(script), "diagnose"],
+                cwd=neutral_cwd,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                check=False,
+            )
+            if probe.returncode:
+                failure = {
+                    "status": "unverifiable",
+                    "reason": "probe_failed",
+                    "exit_code": probe.returncode,
+                    "problem": probe.stderr.strip(),
+                }
+                try:
+                    failure["diagnostic"] = json.loads(probe.stderr)
+                except ValueError:
+                    pass
+                tools["aquarium-dev"] = failure
+            else:
+                tools["aquarium-dev"] = json.loads(probe.stdout)
+        except subprocess.TimeoutExpired as error:
+            tools["aquarium-dev"] = {
+                "status": "unverifiable",
+                "reason": "probe_timeout",
+                "timeout_seconds": timeout_seconds,
+                "problem": str(error),
+            }
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            tools["aquarium-dev"] = {
+                "status": "unverifiable",
+                "reason": "invalid_json"
+                if isinstance(error, ValueError)
+                else "probe_failed",
+                "problem": str(error),
+            }
+    tools = {name: tools[name] for name in selected_components}
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "inspection_scope": "user_global",
+        "tools": tools,
+    }
+''',
+            "parse_arguments": r'''def parse_arguments() -> argparse.Namespace:
+    max_command_timeout_seconds = load_inspector().MAX_COMMAND_TIMEOUT_SECONDS
+    parser = JsonArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repository",
+        help="Existing directory used only as a safe command working directory",
+    )
+    parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=10.0,
+        help="Timeout for each ordinary read-only command; Podway readiness uses its fixed catalog wait",
+    )
+    parser.add_argument(
+        "--component",
+        action="append",
+        choices=GLOBAL_COMPONENTS,
+        help="Inspect only this user-global component; repeat to select more",
+    )
+    parser.add_argument(
+        "--include-sorage-initialization",
+        action="store_true",
+        help="Include the selected local Sorage initialization diagnostic",
+    )
+    parser.add_argument(
+        "--grok-home",
+        action="append",
+        default=[],
+        help="Additional Ouroboros Grok home to inspect; repeat for multiple homes",
+    )
+    parser.add_argument(
+        "--verify-ouroboros-release",
+        action="store_true",
+        help="Compare Ouroboros with official PyPI stable releases",
+    )
+    arguments = parser.parse_args()
+    if (
+        not math.isfinite(arguments.timeout_seconds)
+        or arguments.timeout_seconds <= 0
+        or arguments.timeout_seconds > max_command_timeout_seconds
+    ):
+        raise InspectionError(
+            "invalid_arguments",
+            "--timeout-seconds is outside the supported range",
+        )
+    if any(not value.strip() for value in arguments.grok_home):
+        raise InspectionError("invalid_arguments", "--grok-home must not be blank")
+    selected_components = set(arguments.component or GLOBAL_COMPONENTS)
+    if arguments.include_sorage_initialization and "sorage" not in selected_components:
+        raise InspectionError(
+            "invalid_arguments",
+            "--include-sorage-initialization requires the sorage component",
+        )
+    if (
+        arguments.grok_home or arguments.verify_ouroboros_release
+    ) and "ouroboros" not in selected_components:
+        raise InspectionError(
+            "invalid_arguments", "Ouroboros options require the ouroboros component"
+        )
+    arguments.component = tuple(
+        name for name in GLOBAL_COMPONENTS if name in selected_components
+    )
+    return arguments
+''',
+            "main": r'''def main() -> int:
+    try:
+        arguments = parse_arguments()
+        emit(
+            inspect_global(
+                arguments.repository,
+                arguments.timeout_seconds,
+                arguments.include_sorage_initialization,
+                arguments.component,
+                tuple(arguments.grok_home),
+                arguments.verify_ouroboros_release,
+            )
+        )
+        return 0
+    except InspectionError as error:
+        emit(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "error": {"code": error.code, "message": str(error)},
+            }
+        )
+        return error.exit_code
+    except Exception as error:  # noqa: BLE001 - keep the CLI error boundary JSON-only
+        emit(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "error": {
+                    "code": "inspection_failed",
+                    "message": "unexpected global inspection failure",
+                    "type": type(error).__name__,
+                },
+            }
+        )
+        return 1
+''',
+        },
+        "delete": [],
+        "upstream": {
+            "inspect_global_mcp": "ba8cb183a9e11a91fbd45ec3225307caa1c793de18d43dbe7a717a3da03c1276",
+            "inspect_global": "98ec89a97f3de0a46505fbfe18115d8729f3c804fde256db7792c918614f5cc6",
+            "parse_arguments": "9f5204165840dd7e36e6e5ab601aeab713db5b891bbc6bfbc2e9b8dcc8c5fba3",
+            "main": "8ecc2a6e6f7a61000ac7649c5706d3448ac2b3db48c48a664696102d02f42486",
+        },
+    },
+    "skills/dev-setup-global/scripts/inspect_ouroboros.py": {
+        "replace": {
+            "discover_homes": r'''def discover_homes(
+    explicit: tuple[str, ...] = (),
+) -> tuple[Path, list[Path], dict[Path, str]]:
+    requested = []
+    for value in explicit:
+        if not value.strip():
+            raise InvalidHostHome("Grok home must not be blank")
+        try:
+            path = Path(value).expanduser().resolve()
+            not_directory = path.exists() and not path.is_dir()
+        except (OSError, ValueError, RuntimeError) as error:
+            raise InvalidHostHome("Grok home is unavailable or invalid") from error
+        if not_directory:
+            raise InvalidHostHome("Grok home must be a directory")
+        requested.append(path)
+
+    failures: dict[Path, str] = {}
+    homes: list[Path] = []
+    identities: dict[tuple[int, int], Path] = {}
+
+    def include(path: Path) -> Path:
+        try:
+            path = path.expanduser().resolve()
+        except (OSError, ValueError, RuntimeError):
+            # Keep the original spelling for diagnosis; never probe an unresolved home.
+            failures[path] = "home_resolution_failed"
+        if path not in failures:
+            try:
+                info = path.stat()
+                if stat.S_ISDIR(info.st_mode):
+                    identity = (info.st_dev, info.st_ino)
+                    if identity in identities:
+                        return identities[identity]
+                    identities[identity] = path
+            except FileNotFoundError:
+                pass
+            except OSError:
+                failures[path] = "home_inspection_failed"
+        if path not in homes:
+            homes.append(path)
+        return path
+
+    current = include(Path(os.environ.get("GROK_HOME") or Path.home() / ".grok"))
+    default = Path.home() / ".grok"
+    try:
+        if default.is_dir():
+            include(default)
+    except OSError:
+        failures[include(default)] = "home_inspection_failed"
+    for path in requested:
+        include(path)
+    return current, homes, failures
+''',
+            "unavailable_home": r'''def unavailable_home(home: Path, current: Path, reason: str) -> dict[str, Any]:
+    row = {
+        key: {"status": "unverifiable", "reason": reason}
+        for key in (
+            "rules",
+            "skills",
+            "host_integration",
+            "mcp_registration",
+            "mcp_runtime",
+        )
+    }
+    row.update(
+        home=str(home), current=home == current, status="degraded", reason=reason
+    )
+    row["live_runtime"] = {"status": "not_observed", "reason": "configuration_only"}
+    return row
+''',
+            "inspect_home": r'''def inspect_home(
+    inspector: Any,
+    cwd: Path,
+    timeout: float,
+    home: Path,
+    current: Path,
+    cli: dict[str, Any],
+    assets: dict[str, str] | None,
+    host: dict[str, Any],
+) -> dict[str, Any]:
+    del inspector
+    del cwd
+    del timeout
+    del cli
+    row = {
+        "host_integration": host["host_integration"],
+        "mcp_registration": host["mcp_registration"],
+        "mcp_runtime": host["mcp_runtime"],
+    }
+    row.update(home=str(home), current=home == current)
+    if home.exists() and not home.is_dir():
+        row["reason"] = "home_not_a_directory"
+    row["rules"] = inspect_artifacts(home, "rules", assets)
+    row["skills"] = inspect_artifacts(home, "skills", assets)
+    row["live_runtime"] = {"status": "not_observed", "reason": "configuration_only"}
+    row["status"] = (
+        "configured"
+        if (
+            host.get("version_supported")
+            and all(
+                row[key]["status"] == "configured"
+                for key in (
+                    "host_integration",
+                    "mcp_registration",
+                    "mcp_runtime",
+                )
+            )
+        )
+        else "degraded"
+    )
+    return row
+''',
+            "inspect_ouroboros": r'''def inspect_ouroboros(
+    inspector: Any,
+    cwd: Path,
+    timeout: float,
+    explicit_homes: tuple[str, ...] = (),
+    verify_release: bool = False,
+) -> dict[str, Any]:
+    current, homes, failures = discover_homes(explicit_homes)
+    rows = []
+    cli = inspector.inspect_ouroboros_cli(cwd, timeout)
+    assets = packaged_assets(inspector, cli, cwd, timeout)
+    host = inspector.inspect_ouroboros(cwd, timeout)
+    for home in homes:
+        if home in failures:
+            row = unavailable_home(home, current, failures[home])
+        else:
+            try:
+                row = inspect_home(
+                    inspector, cwd, timeout, home, current, cli, assets, host
+                )
+            except (OSError, ValueError, RuntimeError):
+                row = unavailable_home(home, current, "home_inspection_failed")
+        rows.append(row)
+    freshness = (
+        release_freshness(inspector, cli, timeout)
+        if verify_release
+        else {"status": "not_checked", "source": PYPI_URL}
+    )
+    return {
+        "status": rows[0]["status"],
+        "supported_range": SUPPORTED_RANGE,
+        "cli": {
+            **{
+                key: cli[key]
+                for key in ("installed", "executable", "version", "version_supported")
+            },
+            "status": "missing"
+            if not cli["installed"]
+            else "installed"
+            if cli["version_supported"]
+            else "degraded",
+            "version_probe": cli["probes"]["version"],
+        },
+        "freshness": freshness,
+        "current_home": str(current),
+        "current_home_readiness": rows[0]["status"],
+        "all_discovered_homes_readiness": "configured"
+        if all(row["status"] == "configured" for row in rows)
+        else "degraded",
+        "homes": rows,
+        "legacy_shared_skills": legacy_skills(assets),
+    }
+''',
+        },
+        "delete": [],
+        "upstream": {
+            "discover_homes": "bbb5cd122fd667ac43ad97718052e5a4e3ae18045a5223e49f73cb16f930803a",
+            "unavailable_home": "c1ba59f192b967fb5ebb3e06f29b88231a5807eb7a5cb7a2627a05485a1ecde0",
+            "inspect_home": "46e99600019f5de387c82f9218d52aed8493a94f5553a88b963a60b84e0c0eb5",
+            "inspect_ouroboros": "f71acd6e15dbb4bd0c786f0b025715d705311d8592a154ecdca716b22f1a5aa0",
         },
     },
 }
@@ -1292,7 +1810,9 @@ def check_upstream_directories() -> None:
             + "; add them to COPIED_DIRECTORIES or exclude them deliberately"
         )
     unknown_files = sorted(
-        path.name for path in UPSTREAM_PLUGIN.iterdir() if path.is_file()
+        path.name
+        for path in UPSTREAM_PLUGIN.iterdir()
+        if path.is_file() and path.name not in COPIED_ROOT_FILES
     )
     if unknown_files:
         raise SyncError(
@@ -1445,6 +1965,15 @@ def copy_tree(destination: Path) -> None:
                 f"upstream is missing `{name}/`; refuse to skip a copied directory"
             )
         shutil.copytree(source, destination / name, symlinks=True)
+    for name in COPIED_ROOT_FILES:
+        source = UPSTREAM_PLUGIN / name
+        if source.is_symlink():
+            raise SyncError(f"upstream `{name}` is a symlink; refuse to copy it")
+        if not source.is_file():
+            raise SyncError(
+                f"upstream is missing `{name}`; refuse to skip a copied root file"
+            )
+        shutil.copy2(source, destination / name)
     reject_symlinks(destination)
 
 
@@ -1837,7 +2366,7 @@ def write_plugin_manifest(destination: Path) -> None:
         "license",
         "keywords",
     }
-    dropped = {"interface", "repository", "skills"}
+    dropped = {"interface", "repository", "skills", "mcpServers"}
     unknown = sorted(set(codex) - copied - dropped)
     if unknown:
         raise SyncError(
@@ -2208,13 +2737,22 @@ def check_generated_python(destination: Path) -> None:
         )
 
 
+def unscanned_shipped(relative: str, suffix: str) -> bool:
+    return any(
+        relative.startswith(prefix) and suffix in suffixes
+        for prefix, suffixes in UNSCANNED_SHIPPED_PREFIXES
+    )
+
+
 def check_generated_suffixes(destination: Path) -> None:
     """Refuse generated files whose suffix the transformation does not scan."""
     allowed = set(SCANNED_SUFFIXES)
     unexpected = [
         str(path.relative_to(destination))
         for path in sorted(destination.rglob("*"))
-        if path.is_file() and path.suffix not in allowed
+        if path.is_file()
+        and path.suffix not in allowed
+        and not unscanned_shipped(path.relative_to(destination).as_posix(), path.suffix)
     ]
     if unexpected:
         raise SyncError(

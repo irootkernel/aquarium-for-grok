@@ -26,6 +26,7 @@ TOOLS = (
     "sanho",
     "mulgae",
     "gaori",
+    "sorage",
     "podway",
     "ouroboros",
     "lora",

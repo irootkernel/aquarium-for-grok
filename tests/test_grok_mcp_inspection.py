@@ -728,14 +728,21 @@ class GrokMcpInspectionTests(unittest.TestCase):
                             str(repository),
                             2.0,
                             include_podway=True,
-                            include_ouroboros=True,
                         )
             self.assertEqual(result["schema_version"], inspect_tools.SCHEMA_VERSION)
             self.assertNotIn("dolgorae", result["tools"])
-            self.assertIn("ouroboros", result["tools"])
+            self.assertNotIn("ouroboros", result["tools"])
             self.assertIn("podway", result["tools"])
             self.assertIn("mulgae", result["tools"])
             self.assertIn("gaori", result["tools"])
+            self.assertEqual(
+                result["trusted_global_skills"]["humanizer"]["canonical_path"],
+                str(home / ".agents/skills/humanizer"),
+            )
+            self.assertEqual(
+                result["trusted_global_skills"]["humanize-korean"]["canonical_path"],
+                str(home / ".agents/skills/humanize-korean"),
+            )
 
     def test_scope_status_non_dict_unresolvable_and_gaori_global(self) -> None:
         inspect_tools = load_inspect_tools()
@@ -884,7 +891,17 @@ class GrokMcpInspectionTests(unittest.TestCase):
                         home / ".agents" / "skills",
                     )
                     result = inspect_tools.inspect_im_not_ai()
+                    humanizer = inspect_tools.inspect_humanizer()
             self.assertEqual(result["status"], "missing")
+            self.assertEqual(
+                result["expected_target"],
+                str(home / ".agents" / "skills" / "humanize-korean"),
+            )
+            self.assertEqual(
+                humanizer["expected_target"],
+                str(home / ".agents" / "skills" / "humanizer"),
+            )
+            self.assertNotIn(".codex/skills/humanize-korean", result["expected_target"])
 
     def test_main_rejects_nonpositive_timeout(self) -> None:
         path = (
@@ -906,6 +923,102 @@ class GrokMcpInspectionTests(unittest.TestCase):
         body = json.loads(result.stdout)
         self.assertEqual(body["error"]["code"], "invalid_arguments")
         self.assertNotEqual(result.returncode, 0)
+
+
+def load_inspect_global_tools():
+    directory = (
+        Path(__file__).resolve().parents[1]
+        / "plugins"
+        / "aquarium"
+        / "skills"
+        / "dev-setup-global"
+        / "scripts"
+    )
+    if str(directory) not in sys.path:
+        sys.path.insert(0, str(directory))
+    path = directory / "inspect_global_tools.py"
+    spec = importlib.util.spec_from_file_location("inspect_global_tools", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.dont_write_bytecode = True
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_inspect_ouroboros():
+    directory = (
+        Path(__file__).resolve().parents[1]
+        / "plugins"
+        / "aquarium"
+        / "skills"
+        / "dev-setup-global"
+        / "scripts"
+    )
+    if str(directory) not in sys.path:
+        sys.path.insert(0, str(directory))
+    path = directory / "inspect_ouroboros.py"
+    spec = importlib.util.spec_from_file_location("inspect_ouroboros", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.dont_write_bytecode = True
+    spec.loader.exec_module(module)
+    return module
+
+
+class GlobalInspectorHostTests(unittest.TestCase):
+    def test_global_mcp_reads_user_grok_config(self) -> None:
+        inspect_global_tools = load_inspect_global_tools()
+        inspect_tools = load_inspect_tools()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "grok-home"
+            home.mkdir()
+            repository = Path(tmp) / "repo"
+            repository.mkdir()
+            mulgae = Path(tmp) / "mulgae"
+            mulgae.write_text("#!/bin/sh\n", encoding="utf-8")
+            mulgae.chmod(0o755)
+            (home / "config.toml").write_text(
+                "[mcp_servers.mulgae]\n"
+                f'command = "{mulgae}"\n'
+                'args = ["mcp"]\n'
+                "startup_timeout_sec = 30\n"
+                "tool_timeout_sec = 7501\n",
+                encoding="utf-8",
+            )
+            with patch.dict(os.environ, {"GROK_HOME": str(home)}, clear=False):
+                result = inspect_global_tools.inspect_global_mcp(
+                    inspect_tools,
+                    "mulgae",
+                    str(mulgae),
+                    repository,
+                    3.0,
+                )
+            self.assertEqual(result["status"], "configured")
+            self.assertTrue(result["arguments_match"])
+
+    def test_discover_homes_uses_grok_home(self) -> None:
+        inspect_ouroboros = load_inspect_ouroboros()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            grok_home = Path(tmp) / "relocated-grok"
+            home.mkdir()
+            grok_home.mkdir()
+            env = {key: value for key, value in os.environ.items() if key != "GROK_HOME"}
+            env["GROK_HOME"] = str(grok_home)
+            with patch.object(inspect_ouroboros.Path, "home", return_value=home):
+                with patch.dict(os.environ, env, clear=True):
+                    current, homes, failures = inspect_ouroboros.discover_homes()
+            self.assertEqual(current, grok_home.resolve())
+            self.assertIn(grok_home.resolve(), homes)
+            self.assertNotIn(home / ".codex", homes)
+            extra = home / ".grok-other"
+            extra.mkdir()
+            (extra / "config.toml").write_text("", encoding="utf-8")
+            with patch.object(inspect_ouroboros.Path, "home", return_value=home):
+                with patch.dict(os.environ, env, clear=True):
+                    _, homes_without_extra, _ = inspect_ouroboros.discover_homes()
+            self.assertNotIn(extra.resolve(), homes_without_extra)
+            self.assertEqual(failures, {})
 
 
 if __name__ == "__main__":

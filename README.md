@@ -42,16 +42,18 @@ Written skill names use the plugin-qualified form `/aquarium:<skill>`. The table
 | `task-commit` | Reconcile roadmap task lifecycle state and create one authorized commit that preserves unrelated work. | Automatic for commit requests, or `/aquarium:task-commit` |
 | `release-handler` | Own one stable release lifecycle: settle the cumulative changelog, gate release QA, and publish one version behind separate approvals. | `/aquarium:release-handler` with an intended or planned version |
 | `release-qa` | Exercise the current release candidate through read-only user scenarios covering every change since the previous stable release. | `/aquarium:release-qa` with an intended or confirmed version |
-| `dev-setup` | Diagnose and configure selected development tools, and propose reference-based instruction-file guidance behind separate approvals. | `/aquarium:dev-setup` |
+| `dev-setup` | Diagnose and configure selected repository-local development tools, and propose reference-based instruction-file guidance behind separate approvals. | `/aquarium:dev-setup` |
+| `dev-setup-global` | Diagnose and install user-global CLIs, paired skills, Grok MCP registrations, and Ouroboros without changing repository configuration. | `/aquarium:dev-setup-global` |
 | `dev-setup-bundle` | Apply development-tool setup to explicit Git repositories from one external YAML manifest. | `/aquarium:dev-setup-bundle` with a manifest path |
-| `aquarium-dev` | Diagnose, enroll, and expose the isolated Aquarium development channel that builds local-main tool artifacts under `~/.aquarium-dev`. | `/aquarium:aquarium-dev` |
 | `test-setup` | Audit, propose, and configure the common Make or Bun testing contract for one repository, including evidence-backed legacy waivers. | `/aquarium:test-setup` |
 | `docs-setup` | Audit, establish, adopt, or migrate the repository's canonical documentation structure and roadmap IDs. | `/aquarium:docs-setup` |
 | `independent-review` | Run the canonical static review contract with fresh read-only Grok reviewer subagents, then adjudicate their findings. | `/aquarium:independent-review` with a staged, `HEAD`, commit, range, task, epic, or special-request target |
 | `orca-review` | Run the same review contract through a requested native reviewer that Orca owns and supervises, then adjudicate locally. | Automatic when you name both a target and a reviewer, or `/aquarium:orca-review` |
 | `upgrade` | Adopt a newly released upstream Aquarium version in this generator repository, then publish the reviewed tag and GitHub Release. | `/aquarium:upgrade` with an optional released upstream version |
 
-The four design skills drive Ouroboros as a bounded leaf capability and need it installed and pinned to `>=0.51.1,<0.52.0`. They shape documents only and never implement.
+The four design skills drive Ouroboros as a bounded leaf capability and need it installed and pinned to `>=0.51.1,<0.54.0`. They shape documents only and never implement.
+
+The development channel ships as plugin MCP: `.mcp.json` launches `tools/aquarium-dev/`. It is not a skill. Humanizer and `humanize-korean` install and diagnose at `~/.agents/skills/humanizer` and `~/.agents/skills/humanize-korean`.
 
 `task-handler` loads seven phase skills in order — `task-plan`, `task-implement`, `task-refine`, `task-verify`, `task-document`, `task-review`, `task-close`. Invoke one directly only to resume that exact phase with its required task context.
 
@@ -75,15 +77,16 @@ scripts/sync.py                  the transformation
 plugins/aquarium/                generated output, committed
 ```
 
-Five files diverge semantically and are kept as overrides rather than substitutions:
+Six files diverge semantically and are kept as overrides rather than substitutions:
 
 | Override | Why |
 |---|---|
 | `references/review-contract.md` | Independent Review is Grok subagents plus a repository-state baseline, not a Dolgorae capture. Four scopes only. |
+| `references/tool-catalog.md` | Registers Mulgae, Gaori, and Ouroboros in `~/.grok/config.toml`. Humanizer and `humanize-korean` live at `~/.agents/skills`. |
 | `skills/independent-review/SKILL.md` | Dispatches `spawn_subagent` reviewers, preferring `aquarium:independent-reviewer`, otherwise `explore`. |
-| `skills/dev-setup/SKILL.md` | Grok MCP, skill roots, `ask_user_question`, Ouroboros `grok` runtime. Does not offer Dolgorae. |
+| `skills/dev-setup/SKILL.md` | Repository-local setup: Grok MCP, skill roots, `ask_user_question`, Ouroboros `grok` runtime. Does not offer Dolgorae. |
 | `skills/dev-setup/references/agents-guidance.md` | AGENTS.md is Grok's native instruction file. |
-| `skills/dev-setup/references/tool-catalog.md` | Registers Mulgae, Gaori, and Ouroboros in `~/.grok/config.toml`. |
+| `skills/dev-setup-global/SKILL.md` | User-global setup for this host: no Dolgorae, Grok MCP, writing skills at `~/.agents/skills`. |
 
 ## Upgrade
 

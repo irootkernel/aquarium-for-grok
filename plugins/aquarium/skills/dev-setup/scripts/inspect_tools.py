@@ -16,12 +16,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "aquarium-dev-setup-inspection.v14"
-MULGAE_COMMAND_RESULT_SCHEMA = "mulgae-command-result.v5"
+SCHEMA_VERSION = "aquarium-dev-setup-inspection.v18"
+MULGAE_COMMAND_RESULT_SCHEMA = "mulgae-command-result.v6"
 MULGAE_DOCTOR_RESULT_SCHEMA = "mulgae-doctor-result.v2"
 MULGAE_MCP_TOOL_TIMEOUT_SEC = 7501
 GAORI_MCP_TOOL_TIMEOUT_SEC = 3601
 MAX_COMMAND_TIMEOUT_SECONDS = 86_400.0
+PODWAY_DAEMON_WAIT_SECONDS = 120.0
+PODWAY_DAEMON_CALLER_TIMEOUT_SECONDS = 125.0
 CONFLICT_STATUSES = {"DD", "AU", "UD", "UA", "DU", "AA", "UU"}
 CANONICAL_NUMERIC_COMPONENT = r"(?:0|[1-9][0-9]*)"
 CANONICAL_SEMVER = re.compile(
@@ -29,6 +31,7 @@ CANONICAL_SEMVER = re.compile(
     rf"{CANONICAL_NUMERIC_COMPONENT}\."
     rf"{CANONICAL_NUMERIC_COMPONENT}(?:[-+][0-9A-Za-z.-]+)?"
 )
+SORAGE_ERROR_CODE = re.compile(r"[A-Z][A-Z0-9_]{0,63}")
 SANHO_SKILL_FILES = (
     "SKILL.md",
     "references/lifecycle.md",
@@ -41,6 +44,7 @@ GAORI_SKILL_FILES = (
     "references/authoring.md",
     "references/recovery.md",
 )
+GAORI_STATUS_SKILL_FILES = ("SKILL.md",)
 MULGAE_SKILL_FILES = (
     "SKILL.md",
     "references/lifecycle.md",
@@ -52,6 +56,29 @@ PODWAY_SKILL_FILES = (
     "references/lifecycle.md",
     "references/goal.md",
     "references/recovery.md",
+)
+SORAGE_SKILL_FILES = ("SKILL.md",)
+SORAGE_DOCTOR_CATALOG = (
+    "home.permissions",
+    "config.schema",
+    "config.lock",
+    "vault.marker",
+    "vault.gitattributes",
+    "vault.writable",
+    "db.integrity",
+    "db.pendingIntents",
+    "db.migrations",
+    "artifacts.checksums",
+    "bindings.exist",
+    "bindings.nested",
+    "bindings.ambiguous",
+    "daemon.reachable",
+    "daemon.port",
+    "token.permissions",
+    "service.installed",
+    "backup.schedule",
+    "git.state",
+    "platform.tcc",
 )
 HUMANIZER_SKILL_FILES = (
     "SKILL.md",
@@ -86,17 +113,20 @@ PODWAY_PROCEDURES = (
 )
 PODWAY_PRIOR_CANONICAL_SHA256 = {
     "aquarium-task-v2.yaml": {
+        "ff32214898ddb5a737e7a4c55447a16976d42da34b70cacc11c3b286d695cc77",
         "6bb336f321a83bba429c4173942eb977000014c627245839b3434da7d1055602",
         "c666f17cf41e8a9403f610f89b0b7397352d8ac6e2e5e05e1c268fc0e6ece3d9",
         "0ae730df9ca5854ff61b02679e3ac58aa4508ee35c5a09ba76c35e7d0ef3d45d",
         "b703da6c798801a396d144be1c9c71e0fdb05c95e9e293386bf83c0d238ef927",
     },
     "aquarium-goal-v2.yaml": {
+        "f6d456438ba69a06fb322e4c2220bb824233c2ab239df1f68157c139ebb3a8c5",
         "7bf4460688335c1d1985fc1171313ac42ba7f82a64d8bc8733826a4fdd116e38",
         "90411e16758cb79a01294e008d9a091a52b341fc1e9bb968ce9521fed2910ec3",
         "8ca12a8ba36e9dd035bc70c903b8a5a0a9e4fd6db00cf75e2448f66082ab6ac6",
     },
     "aquarium-validation-v2.yaml": {
+        "423655c9d8b14c97820f36738c1ef32905bc26452113c69d886058f2bb54f8b3",
         "bc454955ef56d9607a9128a085177eb8557f8b24774cba59ddca3c0db88428e8",
         "45192a644087b811eb34952576798ae4f3e85ebdf87c77fc8dc097d3c8bb2f50",
     },
@@ -126,7 +156,7 @@ OUROBOROS_UVX_MCP_ARGS = (
     "serve",
 )
 OUROBOROS_MCP_PACKAGE = re.compile(
-    rf"ouroboros-ai\[mcp\](?:==(0\.51\.{CANONICAL_NUMERIC_COMPONENT}))?"
+    rf"ouroboros-ai\[mcp\](?:==({CANONICAL_NUMERIC_COMPONENT}\.{CANONICAL_NUMERIC_COMPONENT}\.{CANONICAL_NUMERIC_COMPONENT}))?"
 )
 
 
@@ -298,7 +328,7 @@ def supported_podway_version(version: str | None) -> bool:
     if not version:
         return False
     match = re.fullmatch(rf"v?0\.2\.({CANONICAL_NUMERIC_COMPONENT})", version)
-    return bool(match and int(match.group(1)) >= 8)
+    return bool(match and int(match.group(1)) >= 9)
 
 
 def podway_v025_workaround_bytes(name: str, source: bytes) -> bytes | None:
@@ -328,14 +358,20 @@ def supported_gaori_version(version: str | None) -> bool:
     if not version:
         return False
     match = re.fullmatch(rf"v?0\.1\.({CANONICAL_NUMERIC_COMPONENT})", version)
-    return bool(match and int(match.group(1)) >= 14)
+    return bool(match and int(match.group(1)) >= 16)
 
 
 def supported_mulgae_version(version: str | None) -> bool:
     if not version:
         return False
     match = re.fullmatch(rf"v?0\.1\.({CANONICAL_NUMERIC_COMPONENT})", version)
-    return bool(match and int(match.group(1)) >= 18)
+    return bool(match and int(match.group(1)) >= 19)
+
+
+def supported_sorage_version(version: str | None) -> bool:
+    if not version:
+        return False
+    return bool(re.fullmatch(rf"v?0\.1\.{CANONICAL_NUMERIC_COMPONENT}", version))
 
 
 def supported_mulgae_go_version(version: str | None) -> bool:
@@ -353,8 +389,8 @@ def supported_mulgae_go_version(version: str | None) -> bool:
 def supported_ouroboros_version(version: str | None) -> bool:
     if not version:
         return False
-    match = re.fullmatch(rf"v?0\.51\.({CANONICAL_NUMERIC_COMPONENT})", version)
-    return bool(match and int(match.group(1)) >= 1)
+    match = re.fullmatch(rf"v?0\.(51|52|53)\.({CANONICAL_NUMERIC_COMPONENT})", version)
+    return bool(match and (int(match.group(1)) > 51 or int(match.group(2)) >= 1))
 
 
 def ouroboros_version_from_output(output: str) -> str | None:
@@ -476,6 +512,26 @@ def tracked_by_git(
     return probe["exit_code"] == 0
 
 
+def tracked_under_git(
+    repository: Path, relative_path: str, timeout_seconds: float
+) -> bool:
+    probe = run_command(
+        ["git", "ls-files", "--", relative_path], repository, timeout_seconds
+    )
+    return bool(probe["ok"] and probe.get("stdout", "").strip())
+
+
+def untracked_under_git(
+    repository: Path, relative_path: str, timeout_seconds: float
+) -> bool:
+    probe = run_command(
+        ["git", "ls-files", "--others", "--exclude-standard", "--", relative_path],
+        repository,
+        timeout_seconds,
+    )
+    return bool(probe["ok"] and probe.get("stdout", "").strip())
+
+
 def configuration_entry(
     repository: Path,
     relative_path: str,
@@ -526,13 +582,16 @@ def normalized_probe(probe: dict[str, Any]) -> dict[str, Any]:
 def resolved_executable(command: Any) -> Path | None:
     if not isinstance(command, str) or not command:
         return None
-    candidate = Path(command).expanduser()
-    if candidate.is_absolute():
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate.resolve()
+    try:
+        candidate = Path(command).expanduser()
+        if candidate.is_absolute():
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return candidate.resolve()
+            return None
+        discovered = shutil.which(command)
+        return Path(discovered).resolve() if discovered else None
+    except (OSError, ValueError, RuntimeError):
         return None
-    discovered = shutil.which(command)
-    return Path(discovered).resolve() if discovered else None
 
 
 def ouroboros_direct_launcher_matches(
@@ -700,6 +759,154 @@ def normalize_sanho_doctor(probe: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def sorage_envelope_data(
+    probe: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    normalized = normalized_probe(probe)
+    envelope = probe.get("result")
+    if not isinstance(envelope, dict) or not isinstance(envelope.get("ok"), bool):
+        normalized["contract_valid"] = False
+        return normalized, None
+    if envelope["ok"] is False:
+        error = envelope.get("error")
+        code = error.get("code") if isinstance(error, dict) else None
+        valid_code = isinstance(code, str) and bool(SORAGE_ERROR_CODE.fullmatch(code))
+        normalized["contract_valid"] = valid_code
+        normalized["error_code"] = code if valid_code else "invalid_error"
+        return normalized, None
+    data = envelope.get("data")
+    normalized["contract_valid"] = isinstance(data, dict)
+    return normalized, data if isinstance(data, dict) else None
+
+
+def normalize_sorage_version(probe: dict[str, Any]) -> dict[str, Any]:
+    normalized = normalized_probe(probe)
+    result = probe.get("result")
+    version = result.get("version") if isinstance(result, dict) else None
+    normalized["contract_valid"] = bool(
+        probe.get("ok")
+        and isinstance(result, dict)
+        and result.get("name") == "sorage"
+        and isinstance(version, str)
+        and CANONICAL_SEMVER.fullmatch(version)
+    )
+    if normalized["contract_valid"]:
+        normalized["result"] = {"name": "sorage", "version": version}
+    return normalized
+
+
+def normalize_sorage_doctor(
+    probe: dict[str, Any],
+) -> tuple[dict[str, Any], bool | None, int | None]:
+    normalized, data = sorage_envelope_data(probe)
+    if data is None:
+        return normalized, None, None
+    checks = data.get("checks")
+    if not isinstance(checks, list) or len(checks) != len(SORAGE_DOCTOR_CATALOG):
+        normalized["contract_valid"] = False
+        return normalized, None, None
+    counts = {"ok": 0, "warning": 0, "blocking": 0}
+    for expected_id, check in zip(SORAGE_DOCTOR_CATALOG, checks, strict=False):
+        if not isinstance(check, dict):
+            normalized["contract_valid"] = False
+            return normalized, None, None
+        check_id = check.get("id")
+        severity = check.get("severity")
+        message = check.get("message")
+        recovery = check.get("recovery")
+        if (
+            check_id != expected_id
+            or not isinstance(severity, str)
+            or severity not in counts
+            or not isinstance(message, str)
+            or not message
+            or (
+                recovery is not None
+                and (
+                    not isinstance(recovery, dict)
+                    or not isinstance(recovery.get("suggestedCommand"), str)
+                    or not recovery["suggestedCommand"]
+                )
+            )
+        ):
+            normalized["contract_valid"] = False
+            return normalized, None, None
+        counts[severity] += 1
+    not_initialized = all(
+        check["severity"] == "blocking"
+        and isinstance(check.get("recovery"), dict)
+        and check["recovery"].get("suggestedCommand") == "sorage init"
+        for check in checks
+    )
+    expected_exit_code = 1 if counts["blocking"] else 0
+    if probe.get("timed_out") or probe.get("exit_code") != expected_exit_code:
+        normalized["contract_valid"] = False
+        return normalized, None, None
+    normalized["contract_valid"] = True
+    normalized["result"] = {
+        "check_count": len(checks),
+        "ok_count": counts["ok"],
+        "warning_count": counts["warning"],
+        "blocking_count": counts["blocking"],
+    }
+    return normalized, not not_initialized, counts["blocking"]
+
+
+def valid_sorage_project_slug(value: Any) -> bool:
+    return bool(
+        isinstance(value, str)
+        and value
+        and value == value.lower()
+        and not value.startswith("-")
+        and not value.endswith("-")
+        and all(character == "-" or character.isalnum() for character in value)
+    )
+
+
+def normalize_sorage_project_resolution(
+    probe: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    normalized, data = sorage_envelope_data(probe)
+    if data is None or not probe.get("ok"):
+        if data is not None:
+            normalized["contract_valid"] = False
+        return normalized, None
+    kind = data.get("kind")
+    if kind == "unregistered_workspace":
+        normalized["contract_valid"] = True
+        normalized["result"] = {"kind": kind}
+        return normalized, normalized["result"]
+    if kind != "registered_project":
+        normalized["contract_valid"] = False
+        return normalized, None
+    project = data.get("project")
+    binding = data.get("binding")
+    if not isinstance(project, dict) or not isinstance(binding, dict):
+        normalized["contract_valid"] = False
+        return normalized, None
+    slug = project.get("slug")
+    project_status = project.get("status")
+    binding_kind = binding.get("bindingKind")
+    if (
+        not valid_sorage_project_slug(slug)
+        or not isinstance(project_status, str)
+        or project_status not in {"active", "archived"}
+        or not isinstance(binding_kind, str)
+        or binding_kind not in {"git_repository", "directory"}
+    ):
+        normalized["contract_valid"] = False
+        return normalized, None
+    result = {
+        "kind": kind,
+        "project_slug": slug,
+        "project_status": project_status,
+        "binding_kind": binding_kind,
+    }
+    normalized["contract_valid"] = True
+    normalized["result"] = result
+    return normalized, result
+
+
 def skill_root_symlinked(root: Path) -> bool:
     try:
         anchor = Path(os.path.commonpath((Path.home(), root)))
@@ -834,6 +1041,12 @@ def inspect_sanho_skill() -> dict[str, Any]:
     return inspect_agent_skill("use-sanho", SANHO_SKILL_FILES)
 
 
+def agent_skill_ready(agent_skill: dict[str, Any]) -> bool:
+    if agent_skill.get("verification_scope") == "presence_only":
+        return agent_skill.get("present") is True
+    return agent_skill.get("status") == "configured"
+
+
 def normalize_podway_envelope(
     probe: dict[str, Any],
     command: str,
@@ -876,10 +1089,165 @@ def normalize_podway_envelope(
     return normalized, payload
 
 
-def inspect_sanho(repository: Path, timeout_seconds: float) -> dict[str, Any]:
+def normalize_podway_daemon_probe(
+    daemon_probe: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    normalized, payload = normalize_podway_envelope(
+        daemon_probe,
+        "daemon.wait-ready",
+        ("podway.daemon-status-result/v3",),
+    )
+    daemon: dict[str, Any] = {
+        "installed": False,
+        "loaded": False,
+        "reachable": False,
+        "running": False,
+        "version": None,
+        "target": None,
+        "ready": False,
+        "mode": None,
+        "readiness_state": None,
+        "readiness_stage": None,
+        "readiness_elapsed_ms": None,
+        "worktree_recovery": None,
+    }
+    if not isinstance(payload, dict):
+        return normalized, daemon
+
+    observed_version = payload.get("daemon_version")
+    if isinstance(observed_version, str) and re.fullmatch(
+        r"v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", observed_version
+    ):
+        daemon["version"] = observed_version
+    observed_target = payload.get("target")
+    if observed_target in {"aarch64-apple-darwin", "x86_64-apple-darwin"}:
+        daemon["target"] = observed_target
+    daemon.update(
+        {
+            "installed": payload.get("installed") is True,
+            "loaded": payload.get("loaded") is True,
+            "reachable": payload.get("reachable") is True,
+            "running": payload.get("status") == "running",
+        }
+    )
+
+    observed_mode = payload.get("mode")
+    daemon["mode"] = (
+        observed_mode
+        if isinstance(observed_mode, str)
+        and len(observed_mode.encode("utf-8")) <= 64
+        and re.fullmatch(r"[a-z](?:[a-z0-9]|-(?=[a-z0-9]))*", observed_mode)
+        else None
+    )
+    observed_state = payload.get("readiness_state")
+    if observed_state in {
+        "not_running",
+        "unreachable",
+        "starting",
+        "recovering",
+        "ready",
+        "failed",
+    }:
+        daemon["readiness_state"] = observed_state
+    observed_stage = payload.get("readiness_stage")
+    if observed_stage in {
+        "endpoint",
+        "registry",
+        "workspaces",
+        "jobs",
+        "ready",
+        "failed",
+    }:
+        daemon["readiness_stage"] = observed_stage
+    observed_elapsed = payload.get("readiness_elapsed_ms")
+    if (
+        isinstance(observed_elapsed, int)
+        and not isinstance(observed_elapsed, bool)
+        and observed_elapsed >= 0
+    ):
+        daemon["readiness_elapsed_ms"] = observed_elapsed
+    observed_recovery = payload.get("worktree_recovery")
+    if isinstance(observed_recovery, dict):
+        recovery = {
+            key: observed_recovery.get(key) for key in ("total", "completed", "failed")
+        }
+        if all(
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and 0 <= value <= 10_000
+            for value in recovery.values()
+        ):
+            daemon["worktree_recovery"] = recovery
+
+    observed_clients = payload.get("in_flight_client_count")
+    observed_maintenance = payload.get("maintenance_operation_count")
+    activity_valid = bool(
+        (
+            observed_clients is None
+            or isinstance(observed_clients, int)
+            and not isinstance(observed_clients, bool)
+            and 0 <= observed_clients <= 1024
+        )
+        and (
+            observed_maintenance is None
+            or isinstance(observed_maintenance, int)
+            and not isinstance(observed_maintenance, bool)
+            and 0 <= observed_maintenance <= 10_000
+        )
+    )
+    if daemon["readiness_state"] in {"not_running", "unreachable"}:
+        contract_valid = bool(
+            daemon["mode"] == "prod"
+            and observed_stage is None
+            and observed_elapsed is None
+            and observed_recovery is None
+            and observed_clients is None
+            and observed_maintenance is None
+        )
+    else:
+        contract_valid = bool(
+            daemon["mode"] == "prod"
+            and daemon["readiness_state"] is not None
+            and daemon["readiness_stage"] is not None
+            and daemon["readiness_elapsed_ms"] is not None
+            and daemon["worktree_recovery"] is not None
+            and activity_valid
+        )
+    if not contract_valid:
+        normalized["ok"] = False
+        normalized["error_code"] = (
+            "unsupported_daemon_mode"
+            if daemon["mode"] is not None and daemon["mode"] != "prod"
+            else "invalid_daemon_readiness"
+        )
+    recovery = daemon["worktree_recovery"]
+    daemon["ready"] = bool(
+        contract_valid
+        and daemon["reachable"]
+        and daemon["running"]
+        and daemon["readiness_state"] == "ready"
+        and daemon["readiness_stage"] == "ready"
+        and isinstance(recovery, dict)
+        and recovery["completed"] == recovery["total"]
+    )
+    normalized["result"] = {
+        **daemon,
+        "version_valid": daemon["version"] is not None,
+        "target_supported": daemon["target"] is not None,
+    }
+    return normalized, daemon
+
+
+def inspect_sanho(
+    repository: Path,
+    timeout_seconds: float,
+    agent_skill: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     tool = base_tool("sanho")
     tool["version_supported"] = False
-    tool["agent_skill"] = inspect_sanho_skill()
+    tool["agent_skill"] = (
+        agent_skill if agent_skill is not None else inspect_sanho_skill()
+    )
     tool["configuration"] = [
         configuration_entry(repository, ".sanho.json", timeout_seconds),
         configuration_entry(repository, ".sanho_base.json", timeout_seconds),
@@ -1220,7 +1588,9 @@ def normalize_mulgae_doctor(probe: dict[str, Any]) -> dict[str, Any]:
 
 
 def inspect_mulgae_installation_prerequisites(
-    repository: Path, timeout_seconds: float
+    repository: Path,
+    timeout_seconds: float,
+    environment_overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     go_executable = shutil.which("go")
     prerequisite: dict[str, Any] = {
@@ -1238,6 +1608,7 @@ def inspect_mulgae_installation_prerequisites(
         [go_executable, "env", "-json", "GOVERSION", "GOOS", "GOARCH"],
         repository,
         timeout_seconds,
+        environment_overrides,
     )
     normalized = normalized_probe(probe)
     result = probe.get("result")
@@ -1337,9 +1708,7 @@ def mcp_recommendation(global_status: str, local_present: bool) -> str:
         return "confirm_local_intent_or_migrate_to_global"
     if global_status == "configured":
         return "none"
-    if global_status == "missing":
-        return "install_global_registration"
-    return "repair_global_registration"
+    return "continue_with_dev_setup_global"
 
 
 def grok_mcp_entries(server: str, repository: Path) -> dict[str, Any]:
@@ -1635,7 +2004,10 @@ def inspect_mulgae_mcp(
 
 
 def inspect_mulgae(
-    repository: Path, timeout_seconds: float, require_mcp: bool = False
+    repository: Path,
+    timeout_seconds: float,
+    require_mcp: bool = False,
+    agent_skill: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     tool = base_tool("mulgae")
     tool["version_supported"] = False
@@ -1645,10 +2017,11 @@ def inspect_mulgae(
         "supported": platform.system() == "Darwin"
         and platform.machine() in {"arm64", "aarch64"},
     }
-    tool["installation_prerequisites"] = inspect_mulgae_installation_prerequisites(
-        repository, timeout_seconds
+    tool["agent_skill"] = (
+        agent_skill
+        if agent_skill is not None
+        else inspect_agent_skill("use-mulgae", MULGAE_SKILL_FILES)
     )
-    tool["agent_skill"] = inspect_agent_skill("use-mulgae", MULGAE_SKILL_FILES)
     tool["configuration"] = [
         mulgae_configuration_entry(repository, ".mulgae/config.yaml", timeout_seconds),
         mulgae_configuration_entry(repository, ".mulgae/local.yaml", timeout_seconds),
@@ -1818,16 +2191,184 @@ def inspect_mulgae(
     return tool
 
 
+def inspect_sorage(
+    repository: Path,
+    timeout_seconds: float,
+    include_readiness: bool = False,
+    agent_skill: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    tool = base_tool("sorage")
+    tool["version_supported"] = False
+    tool["platform"] = {
+        "system": platform.system(),
+        "machine": platform.machine(),
+        "supported": platform.system() == "Darwin"
+        and platform.machine() in {"arm64", "aarch64"},
+    }
+    tool["agent_skill"] = (
+        agent_skill
+        if agent_skill is not None
+        else inspect_agent_skill("use-sorage", SORAGE_SKILL_FILES)
+    )
+    configuration = configuration_entry(
+        repository,
+        ".sorage/",
+        timeout_seconds,
+    )
+    configuration["tracked"] = tracked_under_git(repository, ".sorage", timeout_seconds)
+    configuration["unignored"] = untracked_under_git(
+        repository, ".sorage", timeout_seconds
+    )
+    configuration["tree_symlinked"] = managed_directory_tree_symlinked(
+        repository / ".sorage", repository
+    )
+    tool["configuration"] = [configuration]
+    tool["initialization_status"] = "not_applicable"
+    tool["project_registration"] = {
+        "status": "not_applicable",
+        "project_slug": None,
+        "project_status": None,
+        "binding_kind": None,
+    }
+    tool["readiness_status"] = "not_applicable"
+    if not tool["installed"]:
+        tool["probes"]["version"] = skipped_probe("executable_missing")
+        tool["probes"]["doctor"] = skipped_probe("executable_missing")
+        tool["probes"]["project_resolve"] = skipped_probe("executable_missing")
+        return tool
+
+    version_probe = json_probe(
+        [tool["executable"], "version", "--json"], repository, timeout_seconds
+    )
+    tool["probes"]["version"] = normalize_sorage_version(version_probe)
+    version_result = version_probe.get("result")
+    tool["version"] = (
+        version_from_probe(version_probe)
+        if isinstance(version_result, dict) and version_result.get("name") == "sorage"
+        else None
+    )
+    tool["version_supported"] = supported_sorage_version(tool["version"])
+    compatible = bool(
+        version_probe["ok"]
+        and tool["probes"]["version"]["contract_valid"]
+        and tool["version_supported"]
+        and tool["platform"]["supported"]
+    )
+    if not compatible:
+        tool["probes"]["doctor"] = skipped_probe("unsupported_runtime")
+        tool["probes"]["project_resolve"] = skipped_probe("unsupported_runtime")
+        tool["status"] = "degraded"
+        tool["readiness_status"] = "degraded"
+        return tool
+
+    if not include_readiness:
+        tool["probes"]["doctor"] = skipped_probe("not_requested")
+        tool["probes"]["project_resolve"] = skipped_probe("not_requested")
+        tool["initialization_status"] = "not_inspected"
+        tool["project_registration"]["status"] = "not_inspected"
+        tool["readiness_status"] = "not_inspected"
+        return tool
+
+    doctor_probe = json_probe(
+        [tool["executable"], "doctor", "--json"], repository, timeout_seconds
+    )
+    normalized_doctor, initialized, blocking_count = normalize_sorage_doctor(
+        doctor_probe
+    )
+    tool["probes"]["doctor"] = normalized_doctor
+    if initialized is False:
+        tool["initialization_status"] = "not_initialized"
+        tool["probes"]["project_resolve"] = skipped_probe("not_initialized")
+        tool["project_registration"]["status"] = "not_inspected"
+        tool["status"] = "installed"
+        tool["readiness_status"] = "initialization_required"
+        return tool
+    if initialized is not True or blocking_count is None:
+        tool["initialization_status"] = "unverifiable"
+        tool["probes"]["project_resolve"] = skipped_probe("initialization_unverifiable")
+        tool["project_registration"]["status"] = "not_inspected"
+        tool["status"] = "degraded"
+        tool["readiness_status"] = "degraded"
+        return tool
+
+    tool["initialization_status"] = "initialized"
+    if blocking_count:
+        tool["probes"]["project_resolve"] = skipped_probe("doctor_blocking")
+        tool["project_registration"]["status"] = "not_inspected"
+        tool["status"] = "degraded"
+        tool["readiness_status"] = "degraded"
+        return tool
+
+    resolution_probe = json_probe(
+        [
+            tool["executable"],
+            "project",
+            "resolve",
+            "--path",
+            str(repository),
+            "--json",
+        ],
+        repository,
+        timeout_seconds,
+    )
+    normalized_resolution, resolution = normalize_sorage_project_resolution(
+        resolution_probe
+    )
+    tool["probes"]["project_resolve"] = normalized_resolution
+    if resolution is None:
+        tool["project_registration"]["status"] = "unverifiable"
+        if normalized_resolution.get("contract_valid"):
+            tool["status"] = "installed"
+            tool["readiness_status"] = "resolution_error"
+        else:
+            tool["status"] = "degraded"
+            tool["readiness_status"] = "degraded"
+        return tool
+    if resolution["kind"] == "unregistered_workspace":
+        tool["project_registration"]["status"] = "unregistered"
+        tool["status"] = "installed"
+        tool["readiness_status"] = "registration_required"
+        return tool
+
+    tool["project_registration"] = {
+        "status": "registered",
+        "project_slug": resolution["project_slug"],
+        "project_status": resolution["project_status"],
+        "binding_kind": resolution["binding_kind"],
+    }
+    ready = bool(
+        resolution["project_status"] == "active"
+        and resolution["binding_kind"] == "git_repository"
+        and agent_skill_ready(tool["agent_skill"])
+        and configuration["ignored"]
+        and not configuration["tracked"]
+        and not configuration["unignored"]
+        and not configuration["symlinked"]
+        and not configuration["tree_symlinked"]
+    )
+    tool["status"] = "configured" if ready else "installed"
+    tool["readiness_status"] = "ready" if ready else "degraded"
+    return tool
+
+
 def inspect_gaori_mcp(
     repository: Path, gaori_executable: str | None, timeout_seconds: float
 ) -> dict[str, Any]:
     return grok_mcp_scopes("gaori", repository, gaori_executable)
 
 
-def inspect_gaori(repository: Path, timeout_seconds: float) -> dict[str, Any]:
+def inspect_gaori(
+    repository: Path,
+    timeout_seconds: float,
+    agent_skill: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     tool = base_tool("gaori")
     tool["version_supported"] = False
-    tool["agent_skill"] = inspect_agent_skill("use-gaori", GAORI_SKILL_FILES)
+    tool["agent_skill"] = (
+        agent_skill
+        if agent_skill is not None
+        else inspect_agent_skill("use-gaori", GAORI_SKILL_FILES)
+    )
     tool["configuration"] = [
         configuration_entry(repository, ".gaori/tester.yaml", timeout_seconds),
         configuration_entry(
@@ -1981,7 +2522,7 @@ def inspect_writing_skill(
     *,
     skill_name: str,
     expected_files: tuple[str, ...],
-    expected_target: Path,
+    expected_target: Path | None,
     supported_release: str,
     require_version: bool,
 ) -> dict[str, Any]:
@@ -2022,14 +2563,16 @@ def inspect_writing_skill(
         "installed": ready,
         "complete_tree_verified": False,
         "verification_scope": "structure_only",
-        "expected_target": str(expected_target),
+        "expected_target": str(expected_target)
+        if expected_target is not None
+        else None,
         "supported_release": supported_release,
         "executable": None,
         "version": version,
         "version_supported": version_supported,
         "status": (
             "unverifiable"
-            if ready
+            if ready or expected_target is None
             else ("missing" if agent_skill["status"] == "missing" else "degraded")
         ),
         "agent_skill": agent_skill,
@@ -2105,6 +2648,8 @@ def inspect_lora() -> dict[str, Any]:
         }
     required_ready = all(
         len(skills[name]["installations"]) == 1
+        and skills[name]["installations"][0]["location"]
+        == str(Path.home() / ".agents/skills" / name)
         and skills[name]["installations"][0]["skill_file_present"]
         and skills[name]["frontmatter_valid"]
         and not skills[name]["symlinked"]
@@ -2179,6 +2724,7 @@ def inspect_deslop() -> dict[str, Any]:
 
     ready = (
         len(installations) == 1
+        and installations[0]["location"] == str(Path.home() / ".agents/skills/deslop")
         and installations[0]["skill_file_present"]
         and installations[0]["license_file_present"]
         and installations[0]["frontmatter_valid"]
@@ -2204,6 +2750,27 @@ def inspect_deslop() -> dict[str, Any]:
         "configuration": [],
         "probes": {},
     }
+
+
+def inspect_ouroboros_cli(repository: Path, timeout_seconds: float) -> dict[str, Any]:
+    tool = base_tool("ooo")
+    tool["version_supported"] = False
+    tool["probes"]["version"] = skipped_probe("executable_missing")
+    if tool["installed"]:
+        version_raw = run_command(
+            [tool["executable"], "--version"], repository, timeout_seconds
+        )
+        tool["version"] = ouroboros_version_from_output(
+            f"{version_raw.get('stdout', '')}\n{version_raw.get('stderr', '')}"
+        )
+        tool["version_supported"] = version_raw["ok"] and supported_ouroboros_version(
+            tool["version"]
+        )
+        tool["probes"]["version"] = {
+            key: version_raw[key]
+            for key in ("attempted", "ok", "exit_code", "timed_out")
+        }
+    return tool
 
 
 def ouroboros_mcp_registration(
@@ -2267,7 +2834,7 @@ def inspect_ouroboros_host_skills() -> dict[str, Any]:
 
 def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any]:
     tool = base_tool("ooo")
-    tool["supported_range"] = ">=0.51.1,<0.52.0"
+    tool["supported_range"] = ">=0.51.1,<0.54.0"
     tool["mcp_registration"] = ouroboros_mcp_registration(repository, tool["executable"])
     tool["host_integration"] = inspect_ouroboros_host_skills()
     if not tool["installed"]:
@@ -2331,9 +2898,17 @@ def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any
     return tool
 
 
-def inspect_podway(repository: Path, timeout_seconds: float) -> dict[str, Any]:
+def inspect_podway(
+    repository: Path,
+    timeout_seconds: float,
+    agent_skill: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     tool = base_tool("podway")
-    tool["agent_skill"] = inspect_agent_skill("use-podway", PODWAY_SKILL_FILES)
+    tool["agent_skill"] = (
+        agent_skill
+        if agent_skill is not None
+        else inspect_agent_skill("use-podway", PODWAY_SKILL_FILES)
+    )
     tool["platform"] = {
         "system": platform.system(),
         "machine": platform.machine(),
@@ -2468,155 +3043,15 @@ def inspect_podway(repository: Path, timeout_seconds: float) -> dict[str, Any]:
             "daemon",
             "wait-ready",
             "--timeout",
-            "120s",
+            f"{PODWAY_DAEMON_WAIT_SECONDS:g}s",
         ],
         repository,
-        max(timeout_seconds, 125.0),
+        max(timeout_seconds, PODWAY_DAEMON_CALLER_TIMEOUT_SECONDS),
     )
-    normalized_daemon, daemon_payload = normalize_podway_envelope(
-        daemon_probe,
-        "daemon.wait-ready",
-        ("podway.daemon-status-result/v3",),
-    )
-    daemon_version = None
-    daemon_reachable = False
-    daemon_ready = False
-    daemon_target = None
-    if isinstance(daemon_payload, dict):
-        daemon_schema = daemon_payload.get("schema")
-        observed_daemon_version = daemon_payload.get("daemon_version")
-        daemon_version = (
-            observed_daemon_version
-            if isinstance(observed_daemon_version, str)
-            and re.fullmatch(
-                r"v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?",
-                observed_daemon_version,
-            )
-            else None
-        )
-        daemon_reachable = daemon_payload.get("reachable") is True
-        observed_target = daemon_payload.get("target")
-        daemon_target = (
-            observed_target
-            if observed_target in {"aarch64-apple-darwin", "x86_64-apple-darwin"}
-            else None
-        )
-        readiness_state = None
-        readiness_stage = None
-        readiness_elapsed_ms = None
-        worktree_recovery = None
-        daemon_mode = None
-        if daemon_schema == "podway.daemon-status-result/v3":
-            observed_mode = daemon_payload.get("mode")
-            daemon_mode = (
-                observed_mode
-                if isinstance(observed_mode, str)
-                and len(observed_mode.encode("utf-8")) <= 64
-                and re.fullmatch(r"[a-z](?:[a-z0-9]|-(?=[a-z0-9]))*", observed_mode)
-                else None
-            )
-            observed_state = daemon_payload.get("readiness_state")
-            observed_stage = daemon_payload.get("readiness_stage")
-            observed_elapsed = daemon_payload.get("readiness_elapsed_ms")
-            observed_recovery = daemon_payload.get("worktree_recovery")
-            observed_clients = daemon_payload.get("in_flight_client_count")
-            observed_maintenance = daemon_payload.get("maintenance_operation_count")
-            clients_valid = observed_clients is None or bool(
-                isinstance(observed_clients, int)
-                and not isinstance(observed_clients, bool)
-                and 0 <= observed_clients <= 1024
-            )
-            maintenance_valid = observed_maintenance is None or bool(
-                isinstance(observed_maintenance, int)
-                and not isinstance(observed_maintenance, bool)
-                and 0 <= observed_maintenance <= 10_000
-            )
-            readiness_state = (
-                observed_state
-                if observed_state
-                in {
-                    "not_running",
-                    "unreachable",
-                    "starting",
-                    "recovering",
-                    "ready",
-                    "failed",
-                }
-                else None
-            )
-            readiness_stage = (
-                observed_stage
-                if observed_stage
-                in {"endpoint", "registry", "workspaces", "jobs", "ready", "failed"}
-                else None
-            )
-            readiness_elapsed_ms = (
-                observed_elapsed
-                if isinstance(observed_elapsed, int)
-                and not isinstance(observed_elapsed, bool)
-                and observed_elapsed >= 0
-                else None
-            )
-            if isinstance(observed_recovery, dict):
-                recovery_counts = {
-                    key: observed_recovery.get(key)
-                    for key in ("total", "completed", "failed")
-                }
-                if all(
-                    isinstance(value, int)
-                    and not isinstance(value, bool)
-                    and 0 <= value <= 10_000
-                    for value in recovery_counts.values()
-                ):
-                    worktree_recovery = recovery_counts
-            if readiness_state in {"not_running", "unreachable"}:
-                v3_contract_valid = bool(
-                    daemon_mode == "prod"
-                    and observed_stage is None
-                    and observed_elapsed is None
-                    and observed_recovery is None
-                    and observed_clients is None
-                    and observed_maintenance is None
-                )
-            else:
-                v3_contract_valid = bool(
-                    daemon_mode == "prod"
-                    and readiness_state is not None
-                    and readiness_stage is not None
-                    and readiness_elapsed_ms is not None
-                    and worktree_recovery is not None
-                    and clients_valid
-                    and maintenance_valid
-                )
-            if not v3_contract_valid:
-                normalized_daemon["ok"] = False
-                normalized_daemon["error_code"] = (
-                    "unsupported_daemon_mode"
-                    if daemon_mode is not None and daemon_mode != "prod"
-                    else "invalid_daemon_readiness"
-                )
-            daemon_ready = bool(
-                v3_contract_valid
-                and daemon_reachable
-                and daemon_payload.get("status") == "running"
-                and readiness_state == "ready"
-                and readiness_stage == "ready"
-                and worktree_recovery["completed"] == worktree_recovery["total"]
-            )
-        normalized_daemon["result"] = {
-            "installed": daemon_payload.get("installed") is True,
-            "loaded": daemon_payload.get("loaded") is True,
-            "reachable": daemon_reachable,
-            "running": daemon_payload.get("status") == "running",
-            "version_valid": daemon_version is not None,
-            "target_supported": daemon_target is not None,
-            "ready": daemon_ready,
-            "mode": daemon_mode,
-            "readiness_state": readiness_state,
-            "readiness_stage": readiness_stage,
-            "readiness_elapsed_ms": readiness_elapsed_ms,
-            "worktree_recovery": worktree_recovery,
-        }
+    normalized_daemon, daemon = normalize_podway_daemon_probe(daemon_probe)
+    daemon_version = daemon["version"]
+    daemon_ready = daemon["ready"]
+    daemon_target = daemon["target"]
     tool["probes"]["daemon_status"] = normalized_daemon
     tool["daemon_version"] = daemon_version
     tool["versions_match"] = (
@@ -2830,28 +3265,64 @@ def inspect(
     requested_path: str,
     timeout_seconds: float,
     include_podway: bool = False,
-    include_ouroboros: bool = False,
+    include_sorage: bool = False,
     require_mulgae_mcp: bool = False,
 ) -> dict[str, Any]:
     repository = resolve_repository(requested_path, timeout_seconds)
+    trusted_global_skills = {
+        name: {
+            "canonical_path": str(path),
+            "present": path.exists(),
+            "verification_scope": "presence_only",
+        }
+        for name, path in {
+            "use-sanho": Path.home() / ".agents/skills/use-sanho",
+            "use-mulgae": Path.home() / ".agents/skills/use-mulgae",
+            "use-gaori": Path.home() / ".agents/skills/use-gaori",
+            "use-gaori-status": Path.home() / ".agents/skills/use-gaori-status",
+            "use-sorage": Path.home() / ".agents/skills/use-sorage",
+            "use-podway": Path.home() / ".agents/skills/use-podway",
+            "lore-commits": Path.home() / ".agents/skills/lore-commits",
+            "lore-query": Path.home() / ".agents/skills/lore-query",
+            "deslop": Path.home() / ".agents/skills/deslop",
+            "humanizer": Path.home() / ".agents/skills/humanizer",
+            "humanize-korean": Path.home() / ".agents/skills/humanize-korean",
+        }.items()
+    }
     tools = {
-        "sanho": inspect_sanho(repository, timeout_seconds),
-        "mulgae": inspect_mulgae(
-            repository, timeout_seconds, require_mcp=require_mulgae_mcp
+        "sanho": inspect_sanho(
+            repository,
+            timeout_seconds,
+            agent_skill=trusted_global_skills.get("use-sanho"),
         ),
-        "gaori": inspect_gaori(repository, timeout_seconds),
-        "lora": inspect_lora(),
-        "deslop": inspect_deslop(),
-        "humanizer": inspect_humanizer(),
-        "im-not-ai": inspect_im_not_ai(),
+        "mulgae": inspect_mulgae(
+            repository,
+            timeout_seconds,
+            require_mcp=require_mulgae_mcp,
+            agent_skill=trusted_global_skills.get("use-mulgae"),
+        ),
+        "gaori": inspect_gaori(
+            repository,
+            timeout_seconds,
+            agent_skill=trusted_global_skills.get("use-gaori"),
+        ),
+        "sorage": inspect_sorage(
+            repository,
+            timeout_seconds,
+            include_readiness=include_sorage,
+            agent_skill=trusted_global_skills.get("use-sorage"),
+        ),
     }
     if include_podway:
-        tools["podway"] = inspect_podway(repository, timeout_seconds)
-    if include_ouroboros:
-        tools["ouroboros"] = inspect_ouroboros(repository, timeout_seconds)
+        tools["podway"] = inspect_podway(
+            repository,
+            timeout_seconds,
+            agent_skill=trusted_global_skills["use-podway"],
+        )
     return {
         "schema_version": SCHEMA_VERSION,
         "repository": repository_inventory(repository, timeout_seconds),
+        "trusted_global_skills": trusted_global_skills,
         "tools": tools,
     }
 
@@ -2868,14 +3339,14 @@ def parse_arguments() -> argparse.Namespace:
         help="Timeout for each read-only command",
     )
     parser.add_argument(
+        "--include-sorage",
+        action="store_true",
+        help="Include explicitly selected Sorage readiness diagnostics",
+    )
+    parser.add_argument(
         "--include-podway",
         action="store_true",
         help="Include explicitly requested Podway readiness diagnostics",
-    )
-    parser.add_argument(
-        "--include-ouroboros",
-        action="store_true",
-        help="Include explicitly requested Ouroboros integration diagnostics",
     )
     parser.add_argument(
         "--require-mulgae-mcp",
@@ -2908,7 +3379,7 @@ def main() -> int:
                 arguments.repository,
                 arguments.timeout_seconds,
                 include_podway=arguments.include_podway,
-                include_ouroboros=arguments.include_ouroboros,
+                include_sorage=arguments.include_sorage,
                 require_mulgae_mcp=arguments.require_mulgae_mcp,
             )
         )

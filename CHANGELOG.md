@@ -4,6 +4,18 @@ This file records concise shipped outcomes of the Aquarium for Grok edition. Ups
 
 ## v0.1.15 - Unreleased
 
+### Added
+
+- Adopt upstream Aquarium v0.1.15 and generate the Grok marketplace from that pin.
+- Ship `dev-setup-global` for user-global CLI, skill, MCP, and Ouroboros diagnosis. The development channel moves from an `aquarium-dev` skill to plugin `.mcp.json` plus `tools/aquarium-dev/`.
+- Treat optional Sorage as a diagnosed global component. Production-binary readiness remains Podway, Mulgae, and Gaori.
+
+### Changed
+
+- Keep Independent Review on Grok `spawn_subagent` with four scopes. This edition still does not diagnose or install Dolgorae.
+- Install and diagnose Humanizer and `humanize-korean` at `~/.agents/skills/humanizer` and `~/.agents/skills/humanize-korean`. Do not treat `$CODEX_HOME/skills/humanize-korean` as a live target.
+- Read Mulgae, Gaori, and Ouroboros MCP from `~/.grok/config.toml` in both repository and global inspectors. Discover Ouroboros homes from `$GROK_HOME` / `~/.grok`.
+
 ## v0.1.14 - 2026-09-07
 
 ### Added

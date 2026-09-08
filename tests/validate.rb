@@ -135,7 +135,8 @@ FORBIDDEN_TEXT = ["$aquarium:", "$use-", "$create-", "$lore-", "$orca-cli", "req
 # `git -c user.name="$aquarium_commit_name"`, which the scan read as an unmapped
 # sigil; `sync.py` keeps the same list and requires each one to still occur
 # upstream.
-SIGIL_LITERALS = ["$aquarium_commit_name", "$aquarium_commit_email"].freeze
+SIGIL_LITERALS = ["$aquarium_commit_name", "$aquarium_commit_email",
+                  "$aquarium_dev_branch", "$aquarium_dev_branch_status"].freeze
 
 # Some upstream text names the Codex CLI as a third-party tool rather than as the
 # host — a Mulgae provider, a required CLI version — and stays correct here. Each
@@ -274,7 +275,12 @@ REQUIRED_TEXT = [
   ["skills/dev-setup/scripts/inspect_tools.py", '".cursor/skills"'],
   ["skills/dev-setup/scripts/inspect_tools.py", 'Path.home() / ".grok"'],
   ["skills/dev-setup/scripts/inspect_tools.py", "GROK_HOME"],
+  ["skills/dev-setup/scripts/inspect_tools.py", '".agents/skills/humanize-korean"'],
   ["skills/dev-setup/scripts/inspect_tools.py", "grok_mcp_entries"],
+  ["skills/dev-setup-global/scripts/inspect_global_tools.py", "grok_mcp_scopes"],
+  ["skills/dev-setup-global/scripts/inspect_global_tools.py", "--grok-home"],
+  ["skills/dev-setup-global/scripts/inspect_ouroboros.py", "GROK_HOME"],
+  ["skills/dev-setup-global/scripts/inspect_ouroboros.py", 'Path.home() / ".grok"'],
   ["skills/dev-setup/scripts/inspect_tools.py", "disabled_mcp_servers"],
   ["skills/dev-setup/scripts/inspect_tools.py", '"host_integration"'],
   ["skills/dev-setup/scripts/inspect_tools.py", "inspect_ouroboros_host_skills"],
@@ -357,6 +363,7 @@ if inspection.file?
 
   # The writing skills must be diagnosed against a root this host can reach.
   assert(script.include?('".agents/skills/humanizer"'), "inspection must expect Humanizer in ~/.agents/skills")
+  assert(script.include?('".agents/skills/humanize-korean"'), "inspection must expect humanize-korean in ~/.agents/skills")
   assert(script.include?("effective_writing_skill_root"), "inspection must expect im-not-ai in ~/.agents/skills")
   assert(!script.include?("def inspect_dolgorae("), "inspection must not diagnose Dolgorae")
   assert(!script.include?("--verify-dolgorae-release"), "inspection must not offer Dolgorae release verification")
@@ -368,6 +375,27 @@ if inspection.file?
   assert(!script.include?("DOLGORAE_INVOCATION_ID_RE"), "inspection must not keep the Dolgorae invocation pattern")
   assert(!script.include?("OUROBOROS_CODEX_MCP"), "inspection must not keep Codex Ouroboros launcher constants")
   assert(!script.include?("codex mcp"), "inspection must not probe Codex MCP")
+end
+
+global_inspection = PLUGIN.join("skills/dev-setup-global/scripts/inspect_global_tools.py")
+if global_inspection.file?
+  script = global_inspection.read
+  assert(script.include?("grok_mcp_scopes"), "global inspection must read Grok MCP registrations")
+  assert(script.include?("--grok-home"), "global inspection must accept --grok-home")
+  assert(!script.include?("--codex-home"), "global inspection must not accept --codex-home")
+  assert(!script.include?("def inspect_dolgorae("), "global inspection must not diagnose Dolgorae")
+  assert(!script.include?("--verify-dolgorae-release"), "global inspection must not offer Dolgorae release verification")
+  assert(!script.include?("inspect_dolgorae"), "global inspection must not call inspect_dolgorae")
+  assert(!script.include?("mcp_registration_probe"), "global inspection must not probe Codex MCP")
+end
+
+ouroboros_inspection = PLUGIN.join("skills/dev-setup-global/scripts/inspect_ouroboros.py")
+if ouroboros_inspection.file?
+  script = ouroboros_inspection.read
+  assert(script.include?("GROK_HOME"), "Ouroboros inspection must resolve GROK_HOME")
+  assert(script.include?('Path.home() / ".grok"'), "Ouroboros inspection must fall back to ~/.grok")
+  assert(!script.include?('Path.home() / ".codex"'), "Ouroboros inspection must not discover ~/.codex")
+  assert(!script.include?("CODEX_HOME"), "Ouroboros inspection must not read CODEX_HOME")
 end
 
 # --- generated scripts run -----------------------------------------------
@@ -668,7 +696,13 @@ def structural?(line)
   stripped.empty? || stripped.match?(/\A(?:\#{1,6}\s|[-*+]\s|\d+\.\s|>|\||<)/)
 end
 
-Pathname.glob(ROOT.join("**/*.md")).reject { |path| path.relative_path_from(ROOT).each_filename.include?("upstream") }.sort.each do |path|
+# Generated plugin markdown is transformed from upstream and may keep
+# upstream wrapping. Edition-authored files live in overrides/, additions/,
+# and the repository root; those sources are the wrapping contract.
+Pathname.glob(ROOT.join("**/*.md")).reject { |path|
+  rel = path.relative_path_from(ROOT)
+  rel.each_filename.include?("upstream") || rel.to_s.start_with?("plugins/aquarium/")
+}.sort.each do |path|
   fenced = false
   in_frontmatter = false
   previous_prose = false
