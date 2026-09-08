@@ -2,8 +2,8 @@
   "version": 1,
   "plugins": {
     "aquarium": {
-      "sha": "c616f8669ea9a0d4211b52a3c2d5bdf7e05c8478",
-      "version": "0.1.14",
+      "sha": "a6641cc071d5f34193ae184e0ea915e461f8b9c9",
+      "version": "0.1.15",
       "components": {
         "agents": [
           {
@@ -19,16 +19,16 @@
         ],
         "skills": [
           {
-            "name": "aquarium-dev",
-            "description": "Diagnose, enroll, repair, rebuild, and expose the explicit Aquarium development channel for one supported canonical che…"
-          },
-          {
             "name": "dev-setup",
-            "description": "Diagnose and configure Aquarium repository tooling and root agent guidance. Use when the user invokes /aquarium:dev-set…"
+            "description": "Diagnose and configure Aquarium repository-local tooling and root agent guidance. Use when the user invokes /aquarium:d…"
           },
           {
             "name": "dev-setup-bundle",
-            "description": "Apply Aquarium development-tool setup across multiple Git repositories from one external YAML manifest. Use when the us…"
+            "description": "Apply Aquarium global and repository development setup across explicit Git repositories. Use when the user explicitly i…"
+          },
+          {
+            "name": "dev-setup-global",
+            "description": "Diagnose, install, and update Aquarium user-global development tools. Use when the user invokes /aquarium:dev-setup-glo…"
           },
           {
             "name": "docs-setup",
@@ -60,7 +60,7 @@
           },
           {
             "name": "refactor",
-            "description": "Shape one major refactor or behavior-change epic with Ouroboros, without implementing it. Use when the user explicitly…"
+            "description": "Shape one major refactor or behavior-change epic with Ouroboros, without implementing it. Use when the user explicitly …"
           },
           {
             "name": "release-handler",
@@ -80,7 +80,7 @@
           },
           {
             "name": "task-document",
-            "description": "Update durable documentation and review status for one refined roadmap task. Use when /aquarium:task-handler delegates…"
+            "description": "Update durable documentation and review status for one refined roadmap task. Use when /aquarium:task-handler delegates …"
           },
           {
             "name": "task-handler",
@@ -92,7 +92,7 @@
           },
           {
             "name": "task-plan",
-            "description": "Plan one named roadmap task without mutation. Use when /aquarium:task-handler delegates its planning phase or when the…"
+            "description": "Plan one named roadmap task without mutation. Use when /aquarium:task-handler delegates its planning phase or when the …"
           },
           {
             "name": "task-refine",
