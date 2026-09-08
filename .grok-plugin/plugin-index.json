@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "plugins": {
+    "aquarium": {
+      "sha": "c616f8669ea9a0d4211b52a3c2d5bdf7e05c8478",
+      "version": "0.1.14",
+      "components": {
+        "agents": [
+          {
+            "name": "independent-reviewer",
+            "description": "Read-only reviewer lens dispatched by /aquarium:independent-review with an explicit lens and one exact review target. D…"
+          }
+        ],
+        "hooks": [
+          {
+            "name": "PreToolUse",
+            "description": "^(Bash|run_terminal_command|run_terminal_cmd)$"
+          }
+        ],
+        "skills": [
+          {
+            "name": "aquarium-dev",
+            "description": "Diagnose, enroll, repair, rebuild, and expose the explicit Aquarium development channel for one supported canonical che…"
+          },
+          {
+            "name": "dev-setup",
+            "description": "Diagnose and configure Aquarium repository tooling and root agent guidance. Use when the user invokes /aquarium:dev-set…"
+          },
+          {
+            "name": "dev-setup-bundle",
+            "description": "Apply Aquarium development-tool setup across multiple Git repositories from one external YAML manifest. Use when the us…"
+          },
+          {
+            "name": "docs-setup",
+            "description": "Audit, establish, adopt, or migrate a repository's canonical documentation structure and roadmap IDs. Use when the user…"
+          },
+          {
+            "name": "epic-handler",
+            "description": "Deliver or resume one named roadmap epic through sequential goal-centered task execution, evidence-gated commits, repea…"
+          },
+          {
+            "name": "epic-validator",
+            "description": "Cold-validate one completed roadmap epic through a bounded direct audit, one remediation and confirmation review, sever…"
+          },
+          {
+            "name": "independent-review",
+            "description": "Run one supervised static review with fresh read-only reviewer subagents against the staged transition, `HEAD`, a commi…"
+          },
+          {
+            "name": "new-feature",
+            "description": "Shape one feature epic for an existing project with Ouroboros, without implementing it. Use when the user explicitly in…"
+          },
+          {
+            "name": "new-project",
+            "description": "Shape a greenfield project into an approved PRD and initial roadmap with Ouroboros, without implementing it. Use when t…"
+          },
+          {
+            "name": "orca-review",
+            "description": "Run one supervised static review of a staged, HEAD, commit, or range target with a fresh requested reviewer through the…"
+          },
+          {
+            "name": "refactor",
+            "description": "Shape one major refactor or behavior-change epic with Ouroboros, without implementing it. Use when the user explicitly…"
+          },
+          {
+            "name": "release-handler",
+            "description": "Prepare, validate, publish, or retarget one stable release with cumulative changelog settlement. Use when the user expl…"
+          },
+          {
+            "name": "release-qa",
+            "description": "Run one full scenario-based QA pass for an exact main release candidate, or one bounded confirmation pass after remedia…"
+          },
+          {
+            "name": "task-close",
+            "description": "Confirm and close one reviewed roadmap task, including an explicitly selected terminal status and optional commit hando…"
+          },
+          {
+            "name": "task-commit",
+            "description": "Prepare and create one authorized Git commit while reconciling roadmap task lifecycle state and preserving unrelated wo…"
+          },
+          {
+            "name": "task-document",
+            "description": "Update durable documentation and review status for one refined roadmap task. Use when /aquarium:task-handler delegates…"
+          },
+          {
+            "name": "task-handler",
+            "description": "Strengthen or resume the procedure around exactly one named roadmap task goal through planning, implementation, refinem…"
+          },
+          {
+            "name": "task-implement",
+            "description": "Implement the approved plan for one named roadmap task. Use when /aquarium:task-handler delegates implementation or whe…"
+          },
+          {
+            "name": "task-plan",
+            "description": "Plan one named roadmap task without mutation. Use when /aquarium:task-handler delegates its planning phase or when the…"
+          },
+          {
+            "name": "task-refine",
+            "description": "Deslop and optimize the implementation-checked diff for one roadmap task before final verification. Use when /aquarium:…"
+          },
+          {
+            "name": "task-review",
+            "description": "Run and resolve Mulgae review for one complete roadmap task diff. Use when /aquarium:task-handler delegates review or w…"
+          },
+          {
+            "name": "task-verify",
+            "description": "Strengthen and verify evidence for one implemented roadmap task. Use when /aquarium:task-handler delegates verification…"
+          },
+          {
+            "name": "test-setup",
+            "description": "Audit, propose, and configure Aquarium's common Make or Bun testing contract for one repository, including evidence-bac…"
+          },
+          {
+            "name": "upgrade",
+            "description": "Upgrade this edition to a newly released upstream Aquarium version: pin the submodule, resolve every sync abort, re-der…"
+          },
+          {
+            "name": "war-room",
+            "description": "Diagnose one difficult bug and shape the next work unit with Ouroboros, without implementing a fix. Use when the user e…"
+          }
+        ]
+      }
+    }
+  }
+}
