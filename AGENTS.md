@@ -37,6 +37,7 @@ Aquarium for Grok is a generated Grok plugin marketplace, and this file is its l
 ## Master Preferences
 
 - Respond to Master in Korean using polite speech. When directly addressing the user, use exactly `Master`.
+- Write plans, proposals, reviews, and other text shown to Master in Korean. Treat them as conversation, not repository artifacts, even when they live in a session file.
 - Keep repository artifacts in the repository's established language and style. When no convention exists, use English unless Master requests otherwise.
 - Report concise conclusions and useful evidence without exposing private chain-of-thought.
 
