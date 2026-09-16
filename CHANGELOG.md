@@ -2,6 +2,29 @@
 
 This file records concise shipped outcomes of the Aquarium for Grok edition. Upstream outcomes live in the [Aquarium changelog](https://github.com/irootkernel/aquarium/blob/main/CHANGELOG.md).
 
+## v0.1.16 - Unreleased
+
+### Added
+
+- Adopt upstream Aquarium v0.1.16 and generate the Grok marketplace from that pin.
+- Ship `/aquarium:mulgae-review` for one report-only standalone Mulgae review of an exact change target or named Task or Epic completion candidate.
+- Carry intent-aware Task, Goal, and Epic completion reviews that classify every requirement `met`, `unmet`, `unverified`, or `not-applicable`.
+
+### Changed
+
+- Keep Independent Review as the native Grok `spawn_subagent` route. Upstream disabled its Dolgorae-backed entrypoint; this edition does not adopt that stub. Review Briefs, change-versus-completion purpose, and criterion aggregation land on the bundled `aquarium:independent-reviewer` path.
+- Restate the shared review and intent contracts with counted substitutions instead of a full `review-contract.md` override, so new Orca proportional-review prose is byte-carried.
+- Raise tool floors with the catalog: Mulgae v0.1.21 (`mulgae-command-result.v8`), Gaori v0.1.17 (seven-file `use-gaori` tree), Sanho v0.2.8 (five-file `use-sanho` tree), and Sorage v0.1.1 with the root `.sorage/` ignore rule.
+- Move plugin install and update requests out of setup skills into the host `grok plugin` marketplace flow.
+- Drop the deleted Aquarium for Kimi edition link.
+
+### Fixed
+
+- Retire `inspect_im_not_ai` surgery: upstream now diagnoses `humanize-korean` at `~/.agents/skills`.
+- Route the user-global MCP view through `inspect_global_mcp_scope` reading `~/.grok/config.toml`, and stop replacing the now host-neutral global wrapper.
+- Read aquarium-dev bundled identity from `plugin.json` instead of missing `.codex-plugin/plugin.json`.
+- Drop Dolgorae from global-setup freshness authorization, agents-guidance review routing, and the bundle-manifest component paragraph.
+
 ## v0.1.15 - 2026-09-08
 
 ### Added

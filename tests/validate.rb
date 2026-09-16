@@ -275,7 +275,9 @@ REQUIRED_TEXT = [
   ["skills/dev-setup/scripts/inspect_tools.py", "GROK_HOME"],
   ["skills/dev-setup/scripts/inspect_tools.py", '".agents/skills/humanize-korean"'],
   ["skills/dev-setup/scripts/inspect_tools.py", "grok_mcp_entries"],
-  ["skills/dev-setup-global/scripts/inspect_global_tools.py", "grok_mcp_scopes"],
+  ["skills/dev-setup/scripts/inspect_tools.py", "inspect_global_mcp_scope"],
+  ["references/review-intent-contract.md", "Dispatch fresh read-only host-native reviewer subagents"],
+  ["tools/aquarium-dev/runtime_entry.py", "directory.parent.parent / \"plugin.json\""],
   ["skills/dev-setup-global/scripts/inspect_global_tools.py", "--grok-home"],
   ["skills/dev-setup-global/scripts/inspect_ouroboros.py", "GROK_HOME"],
   ["skills/dev-setup-global/scripts/inspect_ouroboros.py", 'Path.home() / ".grok"'],
@@ -362,7 +364,7 @@ if inspection.file?
   # The writing skills must be diagnosed against a root this host can reach.
   assert(script.include?('".agents/skills/humanizer"'), "inspection must expect Humanizer in ~/.agents/skills")
   assert(script.include?('".agents/skills/humanize-korean"'), "inspection must expect humanize-korean in ~/.agents/skills")
-  assert(script.include?("effective_writing_skill_root"), "inspection must expect im-not-ai in ~/.agents/skills")
+  assert(script.include?("def inspect_global_mcp_scope("), "inspection must own the Grok global MCP view")
   assert(!script.include?("def inspect_dolgorae("), "inspection must not diagnose Dolgorae")
   assert(!script.include?("--verify-dolgorae-release"), "inspection must not offer Dolgorae release verification")
   %w[mcp_registration_probe classify_mulgae_mcp_scope classify_gaori_mcp_scope classify_ouroboros_registration
@@ -378,7 +380,7 @@ end
 global_inspection = PLUGIN.join("skills/dev-setup-global/scripts/inspect_global_tools.py")
 if global_inspection.file?
   script = global_inspection.read
-  assert(script.include?("grok_mcp_scopes"), "global inspection must read Grok MCP registrations")
+  assert(PLUGIN.join("skills/dev-setup/scripts/inspect_tools.py").read.include?("def inspect_global_mcp_scope("), "project inspection must own the Grok global MCP view")
   assert(script.include?("--grok-home"), "global inspection must accept --grok-home")
   assert(!script.include?("--codex-home"), "global inspection must not accept --codex-home")
   assert(!script.include?("def inspect_dolgorae("), "global inspection must not diagnose Dolgorae")

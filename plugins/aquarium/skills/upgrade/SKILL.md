@@ -46,7 +46,7 @@ Run `python3 scripts/sync.py` repeatedly. Every abort names its own fix and stop
 6. Script surgery abort — re-derive the named-function plan.
 7. Unknown upstream directory — decide copy or exclude.
 
-This edition does not use Dolgorae as a review backend; do not reintroduce it when absorbing an upstream Independent Review rewrite. Hook payloads on this host are camelCase (`toolInput`). MCP registrations live in `~/.grok/config.toml`. MCP tools are called through `search_tool` then `use_tool`. Ouroboros is runtime-only (`ooo setup --runtime grok`).
+This edition does not use Dolgorae as a review backend; do not reintroduce it when absorbing an upstream Independent Review rewrite. Keep Independent Review enabled as the native `spawn_subagent` route even when upstream disables its Dolgorae-backed entrypoint. Hook payloads on this host are camelCase (`toolInput`). MCP registrations live in `~/.grok/config.toml`. MCP tools are called through `search_tool` then `use_tool`. Ouroboros is runtime-only (`ooo setup --runtime grok`).
 
 ## Validate and Document
 

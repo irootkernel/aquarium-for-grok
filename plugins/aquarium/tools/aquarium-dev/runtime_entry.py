@@ -62,7 +62,7 @@ def payload_identity(directory: Path, version: str) -> dict:
 
 
 def bundled_identity(directory: Path) -> dict:
-    manifest = directory.parent.parent / ".codex-plugin/plugin.json"
+    manifest = directory.parent.parent / "plugin.json"
     if manifest.is_symlink():
         raise RuntimeUnavailable("The plugin manifest is symbolic.")
     metadata = json.loads(manifest.read_text())

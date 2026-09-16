@@ -156,13 +156,7 @@ def inspect_global_mcp(
     root: Path,
     timeout_seconds: float,
 ) -> dict[str, Any]:
-    del timeout_seconds
-    scopes = inspector.grok_mcp_scopes(name, root, executable)
-    global_registration = scopes.get("global")
-    if isinstance(global_registration, dict):
-        return global_registration
-    reason = scopes.get("reason") or "registration_unavailable"
-    return {"status": scopes.get("status", "unverifiable"), "reason": reason}
+    return inspector.inspect_global_mcp_scope(name, executable, root, timeout_seconds)
 
 
 def inspect_global_podway(

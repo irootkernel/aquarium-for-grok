@@ -68,6 +68,7 @@ ARGUMENT_HINTS: dict[str, str] = {
     "dev-setup-bundle": "<manifest-path>",
     "independent-review": "<target> [task-or-epic-id]",
     "orca-review": "<target> [task-or-epic-id]",
+    "mulgae-review": "<target> [task-or-epic-id]",
 }
 
 ADDITION_ARGUMENT_HINTS: dict[str, str] = {
@@ -91,11 +92,14 @@ EXCLUDED_FILES: tuple[tuple[str, str], ...] = (
 
 SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
     (
-        "`workspace` and `dirty` remain outside this workflow. Use "
-        "`$aquarium:independent-review` when one of those scopes is required. "
-        "Never stage paths merely to manufacture an Orca Review target.",
-        "`workspace` and `dirty` remain outside this workflow. "
-        "Never stage paths merely to manufacture an Orca Review target.",
+        "`workspace` and `dirty` remain outside this workflow. Report the unsupported "
+        "Orca scope and ask for an explicitly selected supported target or review route; "
+        "Independent Review is disabled and is not a fallback. Never stage paths or "
+        "reinterpret state merely to manufacture an Orca Review target.",
+        "`workspace` and `dirty` remain outside this workflow. Report the unsupported "
+        "Orca scope and ask for an explicitly selected supported target. Independent "
+        "Review on this host also cannot capture `workspace` or `dirty`. Never stage "
+        "paths or reinterpret state merely to manufacture an Orca Review target.",
     ),
     (
         "Dolgorae remains unenrolled until its repository creates and validates the approved "
@@ -109,8 +113,8 @@ SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
     ),
     ("$aquarium:", "/aquarium:"),
     (
-        "Independent Review and Mulgae create fresh native captures. Orca reads the corrected live target.",
-        "Mulgae creates a fresh native capture. Independent Review and Orca read the corrected live target.",
+        "Independent Review would require a fresh capture if separately re-enabled.",
+        "Independent Review rebinds a fresh reviewer dispatch to the corrected target.",
     ),
     ("$use-", "/use-"),
     ("$create-", "/create-"),
@@ -150,8 +154,188 @@ SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "Supported tools are `sanho`, `mulgae`, `gaori`, `sorage`, `podway`, `ouroboros`, `lora`, `deslop`, `humanizer`, and `im-not-ai`. This edition does not accept `dolgorae`.",
     ),
     (
+        "The `dolgorae` component selects its CLI and same-release `use-dolgorae` skill "
+        "for shared global preparation; it does not initialize workspaces or configure Profiles.\n\n",
+        "",
+    ),
+    (
         "The bundled hook is a local guardrail, not complete enforcement: it detects direct shell `git commit` invocations in roadmap repositories, while indirect commits performed by other tools may not pass through that boundary.",
         "The bundled hook is a local guardrail, not complete enforcement: it detects direct shell `git commit` invocations in roadmap repositories, while indirect commits performed by other tools may not pass through that boundary. It is inert until the plugin is trusted.",
+    ),
+    (
+        "Use this contract for one static, read-only review through `/aquarium:orca-review`. "
+        "Read [review-intent-contract.md](review-intent-contract.md) for the Review Brief "
+        "and change-versus-completion semantics, then read "
+        "[finding-disposition.md](finding-disposition.md) for adjudication and remediation. "
+        "The Dolgorae-backed `/aquarium:independent-review` route is temporarily disabled "
+        "and stops before setup or source transmission; its historical target meanings "
+        "remain documented here for compatibility and possible future re-enablement.",
+        "Use this contract for one static, read-only review through "
+        "`/aquarium:independent-review` or `/aquarium:orca-review`. Read "
+        "[review-intent-contract.md](review-intent-contract.md) for the Review Brief and "
+        "change-versus-completion semantics, then read "
+        "[finding-disposition.md](finding-disposition.md) for adjudication and remediation. "
+        "On this edition `/aquarium:independent-review` dispatches fresh reviewer "
+        "subagents through `spawn_subagent`; the Dolgorae machinery its Independent "
+        "Review half documents is not used here.",
+    ),
+    (
+        "| Dolgorae capture | Unsupported |",
+        "| Unsupported | Unsupported |",
+    ),
+    (
+        "reviewed through `git diff --cached`. | Dolgorae capture |",
+        "reviewed through `git diff --cached`. On an unborn `HEAD` this is the empty "
+        "tree to the index. | Reviewer subagent reads |",
+    ),
+    (
+        "| Dolgorae capture | Current registered worktree Git reads |",
+        "| Reviewer subagent Git reads | Current registered worktree Git reads |",
+    ),
+    (
+        "When re-enabled, Independent Review uses Dolgorae's checked immutable capture as target authority. "
+        "Its dormant candidate, capture, manifest, path-safety, lifecycle, settlement, and "
+        "recovery rules are defined by [dolgorae-review-contract.md](dolgorae-review-contract.md).",
+        "Independent Review reads the selected target directly in this host's own checkout through fresh read-only reviewer subagents. "
+        "For `staged`, a reviewer inspects `git diff --cached`, the staged files, and their callers. "
+        "For `head`, `commit`, and `range`, a reviewer obtains file content and diffs from the resolved revisions through read-only Git commands and never substitutes current index or worktree bytes. "
+        "It copies no repository source into a separate store and binds no digest as target authority, so `workspace` and `dirty` remain unsupported.",
+    ),
+    (
+        "When re-enabled, Independent Review also reports ignored state under its "
+        "capture contract.",
+        "Independent Review also reports ignored state through its target inspector.",
+    ),
+    (
+        "When re-enabled, `independent-review` uses one guarded Dolgorae `specialist.review` v2 operation "
+        "to capture the target and run one fresh Codex Reviewer. It creates and accepts no "
+        "Orca Run, Task, Dispatch, worker, terminal, context, or worktree. Missing or "
+        "invalid Dolgorae state fails closed without Orca fallback.",
+        "`independent-review` dispatches one or more fresh read-only reviewer subagents through `spawn_subagent`. "
+        "It creates and accepts no Orca Run, Task, Dispatch, worker, terminal, context, or worktree, "
+        "and performs no Dolgorae discovery, capture, or launch. An unavailable subagent mechanism, "
+        "a failed dispatch, or a reviewer that returns no usable output fails closed without Orca fallback.",
+    ),
+    (
+        "The disabled Independent Review route performs no settlement or recovery. "
+        "Orca Review follows its live Orca guides and "
+        "[orca-supervision.md](orca-supervision.md), including authoritative "
+        "observation on deadline exhaustion.",
+        "Independent Review settles from its own dispatch results and its repository-state "
+        "comparison, under the liveness budget its skill discloses. "
+        "Orca Review follows its live Orca guides and "
+        "[orca-supervision.md](orca-supervision.md), including authoritative "
+        "observation on deadline exhaustion.",
+    ),
+    (
+        "Independent Review additionally returns its target digest, capture, manifest,\n"
+        "source-mutation observation, target-integrity result, and Dolgorae settlement\n"
+        "evidence when that route is enabled.",
+        "Independent Review additionally returns one row per dispatched reviewer — subagent type, "
+        "assigned lens, effective model, its own verdict, and its dispatch status — together with "
+        "its repository-state baseline, comparison, any observed drift, and its target-inspector result.",
+    ),
+    (
+        "Use this contract whenever an enabled Aquarium route asks a reviewer to "
+        "assess a change or completion, and for the disabled "
+        "`/aquarium:independent-review` entrypoint's refusal and routing decision.",
+        "Use this contract whenever an enabled Aquarium route asks a reviewer to "
+        "assess a change or completion, including the "
+        "`/aquarium:independent-review` entrypoint's native reviewer-subagent "
+        "route.",
+    ),
+    (
+        "## Route a disabled Independent Review request\n"
+        "\n"
+        "The disabled `/aquarium:independent-review` entrypoint owns only its refusal "
+        "and routing decision. Apply this matrix before any discovery, setup, source "
+        "handling, provider contact, or review launch:\n"
+        "\n"
+        "| Explicitly preselected supported alternative | Result |\n"
+        "| --- | --- |\n"
+        "| None | Explain the refusal and available alternatives; launch nothing. |\n"
+        "| Exactly one Orca route | Preserve the original target and review question, "
+        "validate the requested reviewer and supported target, then invoke "
+        "`/aquarium:orca-review` under its own contract. |\n"
+        "| Exactly one native Codex route | Preserve the original target and review "
+        "question. Use a fresh host-native review subagent only when the host exposes "
+        "native delegation; otherwise report the unavailable route and stop without "
+        "fallback. |\n"
+        "| More than one alternative | Ask the user to choose exactly one route; "
+        "launch nothing. |\n"
+        "\n"
+        "The selected route owns execution, source handling, lifecycle, evidence, and "
+        "result. The disabled entrypoint adds no fallback, translation, or backend "
+        "guarantee.",
+        "## Route an Independent Review request\n"
+        "\n"
+        "The `/aquarium:independent-review` entrypoint owns the native "
+        "`spawn_subagent` route below and runs only that route. Apply this matrix "
+        "before any discovery, setup, source handling, provider contact, or review "
+        "launch:\n"
+        "\n"
+        "| Explicitly preselected supported alternative | Result |\n"
+        "| --- | --- |\n"
+        "| None | Dispatch fresh read-only host-native reviewer subagents under the "
+        "contract below. |\n"
+        "| Exactly one Orca route | Preserve the original target and review question, "
+        "validate the requested reviewer and supported target, then invoke "
+        "`/aquarium:orca-review` under its own contract. |\n"
+        "| More than one alternative | Ask the user to choose exactly one route; "
+        "launch nothing. |\n"
+        "\n"
+        "The selected route owns execution, source handling, lifecycle, evidence, and "
+        "result. The entrypoint adds no fallback, translation, or backend guarantee.",
+    ),
+    (
+        "## Use a native Codex review subagent\n"
+        "\n"
+        "Use a fresh host-native Codex subagent only after the user explicitly selects\n"
+        "that review route and the current host exposes native delegation. Give it the\n"
+        "same Review Brief, exact target, and approved context that another enabled\n"
+        "static route would receive. Do not invent a delegation tool or silently choose\n"
+        "Orca, Mulgae, or another backend when native delegation is unavailable.",
+        "## Use a native Grok review subagent\n"
+        "\n"
+        "The host's `spawn_subagent` tool provides the fresh native delegation this route\n"
+        "requires, and `/aquarium:independent-review` invokes it on an explicit request.\n"
+        "Give a dispatched subagent the same Review Brief, exact target, and approved\n"
+        "context that another enabled static route would receive. Do not invent a\n"
+        "delegation tool or silently choose Orca, Mulgae, or another backend when that\n"
+        "dispatch is unavailable.",
+    ),
+    (
+        "Use only the lifecycle and evidence the host actually provides. Do not describe\n"
+        "this route as Independent Review, Dolgorae, Orca, or Mulgae, and do not claim an\n"
+        "immutable capture, publication, settlement, or recovery guarantee that was not\n"
+        "observed.",
+        "Use only the lifecycle and evidence the host actually provides. Do not describe\n"
+        "this route as Dolgorae, Orca, or Mulgae, and do not claim an immutable capture,\n"
+        "publication, settlement, or recovery guarantee that was not observed. On this\n"
+        "host the route is `/aquarium:independent-review`, and its freshness guarantee\n"
+        "is only the reviewer's unshared context.",
+    ),
+    (
+        "from Mulgae Review, Orca Review, an explicitly selected native Codex review "
+        "subagent, or the dormant Independent Review contract if that route is "
+        "re-enabled.",
+        "from Mulgae Review, Orca Review, or the fresh reviewer subagents dispatched "
+        "by `/aquarium:independent-review`.",
+    ),
+    (
+        "The disabled `/aquarium:independent-review` route itself only reports its "
+        "refusal and alternative guidance; that refusal launches nothing. Exactly one "
+        "explicitly preselected supported Orca or native Codex alternative may run only "
+        "under its own contract, and native Codex additionally requires host fresh "
+        "delegation. Multiple preselected alternatives require the user to choose one "
+        "before anything launches. A direct `/aquarium:task-review`, standalone "
+        "`/aquarium:mulgae-review`, or standalone `/aquarium:orca-review` is report-only.",
+        "`/aquarium:independent-review` runs its native reviewer-subagent route under "
+        "the intent contract, and a request preselecting another review backend runs "
+        "only under that backend's own contract. Multiple preselected backends require "
+        "the user to choose one before anything launches. A direct "
+        "`/aquarium:task-review`, standalone `/aquarium:independent-review`, "
+        "`/aquarium:mulgae-review`, or `/aquarium:orca-review` is report-only.",
     ),
 )
 
@@ -161,8 +345,16 @@ SCRIPT_SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "import stat\n"
         "import subprocess\n"
         "import sys\n"
+        "import time\n"
         "from pathlib import Path\n"
         "from typing import Any\n"
+        "\n"
+        "try:\n"
+        "    import yaml\n"
+        "except ModuleNotFoundError as error:\n"
+        '    if error.name != "yaml":\n'
+        "        raise\n"
+        "    yaml = None  # type: ignore[assignment]\n"
         "\n"
         "GLOBAL_SCRIPT_DIRECTORY = str(\n"
         '    Path(__file__).resolve().parents[2] / "dev-setup-global/scripts"\n'
@@ -179,8 +371,16 @@ SCRIPT_SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "import shutil\n"
         "import subprocess\n"
         "import sys\n"
+        "import time\n"
         "from pathlib import Path\n"
-        "from typing import Any\n",
+        "from typing import Any\n"
+        "\n"
+        "try:\n"
+        "    import yaml\n"
+        "except ModuleNotFoundError as error:\n"
+        '    if error.name != "yaml":\n'
+        "        raise\n"
+        "    yaml = None  # type: ignore[assignment]\n",
     ),
     ("InvalidCodexHome", "InvalidHostHome"),
     ("per-Codex-home", "per-Grok-home"),
@@ -207,6 +407,10 @@ SCRIPT_SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
     (
         'REQUIRED_GLOBAL_COMMANDS = frozenset({"podway", "mulgae", "gaori", "dolgorae"})\n',
         'REQUIRED_GLOBAL_COMMANDS = frozenset({"podway", "mulgae", "gaori"})\n',
+    ),
+    (
+        '            "use-dolgorae": Path.home() / ".agents/skills/use-dolgorae",\n',
+        "",
     ),
     (
         '    "sanho",\n'
@@ -325,6 +529,10 @@ SCRIPT_SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         '    "Shorten the command, or route a commit through the Aquarium task-commit skill."\n'
         ")\n",
     ),
+    (
+        '    manifest = directory.parent.parent / ".codex-plugin/plugin.json"\n',
+        '    manifest = directory.parent.parent / "plugin.json"\n',
+    ),
     ("$aquarium:", "/aquarium:"),
 )
 
@@ -351,7 +559,12 @@ REQUIRED_TEXT: tuple[tuple[str, str], ...] = (
     ("skills/dev-setup/scripts/inspect_tools.py", "GROK_HOME"),
     ("skills/dev-setup/scripts/inspect_tools.py", '".agents/skills/humanize-korean"'),
     ("skills/dev-setup/scripts/inspect_tools.py", "grok_mcp_entries"),
-    ("skills/dev-setup-global/scripts/inspect_global_tools.py", "grok_mcp_scopes"),
+    ("skills/dev-setup/scripts/inspect_tools.py", "inspect_global_mcp_scope"),
+    (
+        "references/review-intent-contract.md",
+        "Dispatch fresh read-only host-native reviewer subagents",
+    ),
+    ("tools/aquarium-dev/runtime_entry.py", 'directory.parent.parent / "plugin.json"'),
     ("skills/dev-setup-global/scripts/inspect_global_tools.py", "--grok-home"),
     ("skills/dev-setup-global/scripts/inspect_ouroboros.py", "GROK_HOME"),
     ("skills/dev-setup-global/scripts/inspect_ouroboros.py", 'Path.home() / ".grok"'),
@@ -952,155 +1165,32 @@ def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any
     tool["status"] = "configured" if components_ready else "degraded"
     return tool
 ''',
-            "inspect_im_not_ai": r'''def effective_writing_skill_root() -> Path:
-    return Path.home() / ".agents" / "skills"
-
-
-def inspect_im_not_ai() -> dict[str, Any]:
-    return inspect_writing_skill(
-        skill_name="humanize-korean",
-        expected_files=HUMANIZE_KOREAN_SKILL_FILES,
-        expected_target=effective_writing_skill_root() / "humanize-korean",
-        supported_release=IM_NOT_AI_SUPPORTED_RELEASE,
-        require_version=False,
-    )
-''',
-            "inspect": r'''def inspect(
-    requested_path: str,
+            "inspect_global_mcp_scope": r'''def inspect_global_mcp_scope(
+    name: str,
+    executable: str | None,
+    root: Path,
     timeout_seconds: float,
-    include_podway: bool = False,
-    include_sorage: bool = False,
-    require_mulgae_mcp: bool = False,
 ) -> dict[str, Any]:
-    repository = resolve_repository(requested_path, timeout_seconds)
-    trusted_global_skills = {
-        name: {
-            "canonical_path": str(path),
-            "present": path.exists(),
-            "verification_scope": "presence_only",
+    del timeout_seconds
+    reading = grok_mcp_entries(name, Path(root.anchor))
+    if reading.get("unverifiable"):
+        return {
+            "status": "unverifiable",
+            "reason": reading["unverifiable"],
         }
-        for name, path in {
-            "use-sanho": Path.home() / ".agents/skills/use-sanho",
-            "use-mulgae": Path.home() / ".agents/skills/use-mulgae",
-            "use-gaori": Path.home() / ".agents/skills/use-gaori",
-            "use-gaori-status": Path.home() / ".agents/skills/use-gaori-status",
-            "use-sorage": Path.home() / ".agents/skills/use-sorage",
-            "use-podway": Path.home() / ".agents/skills/use-podway",
-            "lore-commits": Path.home() / ".agents/skills/lore-commits",
-            "lore-query": Path.home() / ".agents/skills/lore-query",
-            "deslop": Path.home() / ".agents/skills/deslop",
-            "humanizer": Path.home() / ".agents/skills/humanizer",
-            "humanize-korean": Path.home() / ".agents/skills/humanize-korean",
-        }.items()
-    }
-    tools = {
-        "sanho": inspect_sanho(
-            repository,
-            timeout_seconds,
-            agent_skill=trusted_global_skills.get("use-sanho"),
-        ),
-        "mulgae": inspect_mulgae(
-            repository,
-            timeout_seconds,
-            require_mcp=require_mulgae_mcp,
-            agent_skill=trusted_global_skills.get("use-mulgae"),
-        ),
-        "gaori": inspect_gaori(
-            repository,
-            timeout_seconds,
-            agent_skill=trusted_global_skills.get("use-gaori"),
-        ),
-        "sorage": inspect_sorage(
-            repository,
-            timeout_seconds,
-            include_readiness=include_sorage,
-            agent_skill=trusted_global_skills.get("use-sorage"),
-        ),
-    }
-    if include_podway:
-        tools["podway"] = inspect_podway(
-            repository,
-            timeout_seconds,
-            agent_skill=trusted_global_skills["use-podway"],
-        )
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "repository": repository_inventory(repository, timeout_seconds),
-        "trusted_global_skills": trusted_global_skills,
-        "tools": tools,
-    }
-''',
-            "parse_arguments": r'''def parse_arguments() -> argparse.Namespace:
-    parser = JsonArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--repository", required=True, help="Path inside the Git worktree to inspect"
+    if reading.get("invalid_config"):
+        return {
+            "status": "degraded",
+            "reason": f"{reading['invalid_config']}_config_invalid_toml",
+        }
+    return grok_mcp_scope_status(
+        reading["scopes"]["user"],
+        executable,
+        Path(root.anchor),
+        "global",
+        name,
+        tuple(reading.get("disabled_servers") or ()),
     )
-    parser.add_argument(
-        "--timeout-seconds",
-        type=float,
-        default=10.0,
-        help="Timeout for each read-only command",
-    )
-    parser.add_argument(
-        "--include-sorage",
-        action="store_true",
-        help="Include explicitly selected Sorage readiness diagnostics",
-    )
-    parser.add_argument(
-        "--include-podway",
-        action="store_true",
-        help="Include explicitly requested Podway readiness diagnostics",
-    )
-    parser.add_argument(
-        "--require-mulgae-mcp",
-        action="store_true",
-        help="Require an explicitly selected Mulgae MCP registration for status",
-    )
-    arguments = parser.parse_args()
-    if (
-        not math.isfinite(arguments.timeout_seconds)
-        or arguments.timeout_seconds <= 0
-        or arguments.timeout_seconds > MAX_COMMAND_TIMEOUT_SECONDS
-    ):
-        raise InspectionError(
-            "invalid_arguments",
-            f"--timeout-seconds must be greater than zero and at most {MAX_COMMAND_TIMEOUT_SECONDS:g}",
-        )
-    return arguments
-''',
-            "main": r'''def main() -> int:
-    try:
-        arguments = parse_arguments()
-        emit(
-            inspect(
-                arguments.repository,
-                arguments.timeout_seconds,
-                include_podway=arguments.include_podway,
-                include_sorage=arguments.include_sorage,
-                require_mulgae_mcp=arguments.require_mulgae_mcp,
-            )
-        )
-        return 0
-    except InspectionError as error:
-        emit(
-            {
-                "schema_version": SCHEMA_VERSION,
-                "error": {"code": error.code, "message": str(error)},
-            }
-        )
-        return error.exit_code
-    except Exception as error:  # noqa: BLE001 - keep the CLI error boundary JSON-only
-        emit(
-            {
-                "schema_version": SCHEMA_VERSION,
-                "error": {
-                    "code": "inspection_failed",
-                    "message": "unexpected local inspection failure",
-                    "type": type(error).__name__,
-                },
-            }
-        )
-        return 1
 ''',
         },
         "delete": [
@@ -1109,7 +1199,6 @@ def inspect_im_not_ai() -> dict[str, Any]:
             "classify_gaori_mcp_scope",
             "classify_ouroboros_registration",
             "effective_mcp_registration",
-            "named_mcp_server_missing",
             "missing_mcp_scope",
             "failed_mcp_scope",
             "codex_version_from_output",
@@ -1121,15 +1210,12 @@ def inspect_im_not_ai() -> dict[str, Any]:
             "is_arm64_macho",
         ],
         "upstream": {
-            "inspect_mulgae_mcp": "4fa6e9beab6d1a963e2e8d652bbb893ac638190c849d1a08547c6a5f77d85db0",
-            "inspect_gaori_mcp": "b6c0dc1d71c77f5ba85afdb2f9eb3e1640674e5721888c99e5a0ef0525a7b9f1",
+            "inspect_mulgae_mcp": "c2548c0144b3399e6da4919d669a73ff6b81d06aca8b7c07945a77867ac6e54f",
+            "inspect_gaori_mcp": "2741e3cc194d726601f5c4d5d1d5d2aa834ce4ec5540f1c9fe245d52d735290d",
             "ouroboros_direct_launcher_matches": "cd3da17085733d6f01f0b9f53ff6f9d2c46ed1f298ae9dc93cdc292f4b915fea",
             "ouroboros_isolated_launcher_matches": "ef4368b2f583ba6c88f652e3a59b3f6fa4661dc71f4f77fa1a697c2810913e91",
-            "inspect_ouroboros": "c4100d090e7925b477cf06754096718ca0f84018f6965c0061c31ccc5511ed0b",
-            "inspect_im_not_ai": "a1b5eb4cf6c695ca4ba9ed634e8541efe5b6a75a0ccd805b09bf75fa3410d732",
-            "inspect": "535bec1ec459a9ac10ae7ac6a7e1117dfd83fd44113b6812645db0bb50f85eae",
-            "parse_arguments": "0f84de4e9a220dfe9d3aca4c479d645328cdd269c5575ff696bfab743bfe9d45",
-            "main": "95951cea212f2e20a49bbccc9888215df2a2b128755684fbd17396550b234c71",
+            "inspect_ouroboros": "d4ab5bb6dc7aac2c7623ac41ccb6c65a9f4fcc551d145508b7bdcc7230599c73",
+            "inspect_global_mcp_scope": "970e363c6a258a8b6d12c420f9669273810791812b2169591221f4eacb2c6254",
         },
     },
     "skills/independent-review/scripts/inspect_review_target.py": {
@@ -1206,21 +1292,6 @@ def inspect_im_not_ai() -> dict[str, Any]:
     },
     "skills/dev-setup-global/scripts/inspect_global_tools.py": {
         "replace": {
-            "inspect_global_mcp": r'''def inspect_global_mcp(
-    inspector: Any,
-    name: str,
-    executable: str | None,
-    root: Path,
-    timeout_seconds: float,
-) -> dict[str, Any]:
-    del timeout_seconds
-    scopes = inspector.grok_mcp_scopes(name, root, executable)
-    global_registration = scopes.get("global")
-    if isinstance(global_registration, dict):
-        return global_registration
-    reason = scopes.get("reason") or "registration_unavailable"
-    return {"status": scopes.get("status", "unverifiable"), "reason": reason}
-''',
             "inspect_global": r'''def inspect_global(
     repository: str | None,
     timeout_seconds: float,
@@ -1496,7 +1567,6 @@ def inspect_im_not_ai() -> dict[str, Any]:
         },
         "delete": [],
         "upstream": {
-            "inspect_global_mcp": "ba8cb183a9e11a91fbd45ec3225307caa1c793de18d43dbe7a717a3da03c1276",
             "inspect_global": "98ec89a97f3de0a46505fbfe18115d8729f3c804fde256db7792c918614f5cc6",
             "parse_arguments": "9f5204165840dd7e36e6e5ab601aeab713db5b891bbc6bfbc2e9b8dcc8c5fba3",
             "main": "8ecc2a6e6f7a61000ac7649c5706d3448ac2b3db48c48a664696102d02f42486",

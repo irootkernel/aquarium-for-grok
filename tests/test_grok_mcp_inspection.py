@@ -45,6 +45,39 @@ class GrokMcpInspectionTests(unittest.TestCase):
             self.assertIsNone(result["scopes"]["user"])
             self.assertIsNone(result["scopes"]["project"])
 
+    def test_inspect_global_mcp_scope_reads_user_config_not_project(self) -> None:
+        inspect_tools = load_inspect_tools()
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "grok-home"
+            home.mkdir()
+            mulgae = Path(tmp) / "bin" / "mulgae"
+            mulgae.parent.mkdir()
+            mulgae.write_text("#!/bin/sh\n")
+            mulgae.chmod(0o755)
+            (home / "config.toml").write_text(
+                "[mcp_servers.mulgae]\n"
+                f'command = "{mulgae}"\n'
+                'args = ["mcp"]\n'
+                "startup_timeout_sec = 30\n"
+                "tool_timeout_sec = 7501\n"
+            )
+            repository = Path(tmp) / "repo"
+            (repository / ".grok").mkdir(parents=True)
+            (repository / ".grok" / "config.toml").write_text(
+                "[mcp_servers.mulgae]\n"
+                f'command = "{mulgae}"\n'
+                'args = ["mcp", "--project-root", "/unrelated"]\n'
+            )
+            with patch.dict(os.environ, {"GROK_HOME": str(home)}, clear=False):
+                result = inspect_tools.inspect_global_mcp_scope(
+                    "mulgae",
+                    str(mulgae),
+                    repository,
+                    2.0,
+                )
+            self.assertEqual(result["status"], "configured")
+            self.assertTrue(result["arguments_match"])
+
     def test_skill_roots_include_grok_and_agents(self) -> None:
         inspect_tools = load_inspect_tools()
         with tempfile.TemporaryDirectory() as tmp:
@@ -743,6 +776,7 @@ class GrokMcpInspectionTests(unittest.TestCase):
                 result["trusted_global_skills"]["humanize-korean"]["canonical_path"],
                 str(home / ".agents/skills/humanize-korean"),
             )
+            self.assertNotIn("use-dolgorae", result["trusted_global_skills"])
 
     def test_scope_status_non_dict_unresolvable_and_gaori_global(self) -> None:
         inspect_tools = load_inspect_tools()
@@ -886,10 +920,6 @@ class GrokMcpInspectionTests(unittest.TestCase):
             env = {key: value for key, value in os.environ.items() if key != "GROK_HOME"}
             with patch.object(inspect_tools.Path, "home", return_value=home):
                 with patch.dict(os.environ, env, clear=True):
-                    self.assertEqual(
-                        inspect_tools.effective_writing_skill_root(),
-                        home / ".agents" / "skills",
-                    )
                     result = inspect_tools.inspect_im_not_ai()
                     humanizer = inspect_tools.inspect_humanizer()
             self.assertEqual(result["status"], "missing")
