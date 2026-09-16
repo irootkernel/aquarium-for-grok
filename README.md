@@ -23,7 +23,17 @@ If `[marketplace] require_sha = true`, the documented pin is a `plugin-index.jso
 
 Enable the plugin in `/plugins` if it is not already on, then start a new session so the skill snapshot reloads.
 
-The generated plugin is committed, so installation never depends on the submodule being fetched. If `aquarium-for-claude` is also enabled in Grok through Claude compatibility, disable or uninstall it: both plugins are named `aquarium`, so the higher-priority one shadows the other.
+The generated plugin is committed, so installation never depends on the submodule being fetched.
+
+Both this edition and Aquarium for Claude use the plugin name `aquarium`. Grok still discovers `~/.claude/plugins` when `[compat.claude] skills = false`, and the Claude copy hides this edition so `grok inspect` never lists the Grok install. Leave Claude Code's install in place for that host.
+
+On Grok, link the hashed install — the `path` field from `grok plugin list --json` on the object whose `marketplace` is `aquarium-for-grok`, not `source` — to `~/.grok/plugins/aquarium` so the native user plugin wins. Use `ln -sfn`; `ln -sf` does not retarget an existing directory symlink on macOS. Confirm `readlink ~/.grok/plugins/aquarium` equals that `path` and `grok inspect` reports `aquarium` from `~/.grok/plugins/aquarium`. Retarget after every `grok plugin update` because the hashed install directory changes.
+
+```bash
+mkdir -p ~/.grok/plugins
+ln -sfn "$(grok plugin list --json | python3 -c 'import json,sys; print(next(p["path"] for p in json.load(sys.stdin) if p.get("marketplace") == "aquarium-for-grok"))')" ~/.grok/plugins/aquarium
+readlink ~/.grok/plugins/aquarium
+```
 
 Written skill names use the plugin-qualified form `/aquarium:<skill>`. The table below lists that qualified name, not the keystrokes to type. After install, type the form `grok inspect --json` reports for that skill: the bare `/<skill>` when `invocableAs` is absent, or `/aquarium:<skill>` when Grok sets `invocableAs` because the name collides. Grok documents the qualified form for name collisions. The plugin `name` is `aquarium`.
 

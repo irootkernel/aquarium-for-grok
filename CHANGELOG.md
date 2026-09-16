@@ -2,6 +2,12 @@
 
 This file records concise shipped outcomes of the Aquarium for Grok edition. Upstream outcomes live in the [Aquarium changelog](https://github.com/irootkernel/aquarium/blob/main/CHANGELOG.md).
 
+## Unreleased
+
+### Fixed
+
+- Keep the Grok `aquarium` install in front of a same-named Claude-compat plugin by `ln -sfn` of the `grok plugin list --json` `path` (not `source`) onto `~/.grok/plugins/aquarium` after marketplace update, and refuse Claude-path Aquarium skills in this generator's agent guidance.
+
 ## v0.1.16 - 2026-09-16
 
 ### Added

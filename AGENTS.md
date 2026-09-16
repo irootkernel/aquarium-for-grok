@@ -67,5 +67,6 @@ Aquarium for Grok is a generated Grok plugin marketplace, and this file is its l
 
 - Never edit `plugins/aquarium/` by hand. Change `scripts/sync.py`, `overrides/`, or `additions/`, run `python3 scripts/sync.py`, and commit the regenerated tree together with its source change.
 - Independent Review on this host uses Grok subagents only. Do not reintroduce Dolgorae as a review backend.
+- Never follow an Aquarium skill whose `SKILL.md` path is under `~/.claude` or `aquarium-for-claude`. This host's plugin is the generated tree under `plugins/aquarium/` and the Grok marketplace install under `~/.grok`. If `grok inspect` reports `aquarium` from a Claude marketplace path, stop and use those Grok paths.
 - Keep every prose paragraph in Markdown on one source line.
 - Do not push or create tags without explicit direction.

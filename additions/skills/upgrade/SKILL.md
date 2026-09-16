@@ -63,7 +63,7 @@ Create bisectable commits in this repository's style with Lore trailers on non-t
 2. Create the annotated tag `vX.Y.Z` titled `Aquarium for Grok vX.Y.Z` and push it.
 3. Publish the GitHub release.
 4. Write `.grok-plugin/plugin-index.json` with this release commit as the plugin `sha` so installs under `[marketplace] require_sha = true` can pin it. The first commit of this edition cannot carry its own sha; emit the file after that commit exists.
-5. When the user asks, refresh the local installation with `grok plugin marketplace update` and `grok plugin update aquarium`, then tell the user a new session is required.
+5. When the user asks, refresh the local installation with `grok plugin marketplace update` and `grok plugin update aquarium`. From `grok plugin list --json`, take the `path` field on the object whose `marketplace` is `aquarium-for-grok` (not `source`). Run `mkdir -p ~/.grok/plugins` and `ln -sfn <path> ~/.grok/plugins/aquarium`; `-n` is required on macOS so an existing directory symlink is retargeted rather than receiving a nested entry. Confirm `readlink ~/.grok/plugins/aquarium` equals that `path`, then that `grok inspect` reports `aquarium` from `~/.grok/plugins/aquarium` rather than a Claude marketplace path. Tell the user a new session is required.
 
 ## Boundaries
 
