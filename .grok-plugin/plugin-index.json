@@ -2,8 +2,8 @@
   "version": 1,
   "plugins": {
     "aquarium": {
-      "sha": "a6641cc071d5f34193ae184e0ea915e461f8b9c9",
-      "version": "0.1.15",
+      "sha": "839c024aff5b33a3604fd6346e6aceeb10cdf518",
+      "version": "0.1.16",
       "components": {
         "agents": [
           {
@@ -28,7 +28,7 @@
           },
           {
             "name": "dev-setup-global",
-            "description": "Diagnose, install, and update Aquarium user-global development tools. Use when the user invokes /aquarium:dev-setup-glo…"
+            "description": "Diagnose, install, and update supported user-global development tools and integrations. Excludes Aquarium plugin instal…"
           },
           {
             "name": "docs-setup",
@@ -45,6 +45,10 @@
           {
             "name": "independent-review",
             "description": "Run one supervised static review with fresh read-only reviewer subagents against the staged transition, `HEAD`, a commi…"
+          },
+          {
+            "name": "mulgae-review",
+            "description": "Run one report-only standalone Mulgae review of an exact supported change target or named Task or Epic completion candi…"
           },
           {
             "name": "new-feature",
