@@ -2,8 +2,8 @@
   "version": 1,
   "plugins": {
     "aquarium": {
-      "sha": "839c024aff5b33a3604fd6346e6aceeb10cdf518",
-      "version": "0.1.16",
+      "sha": "e5732bdbe3a84a374da0a278dea7f80e6d17f5ae",
+      "version": "0.1.17",
       "components": {
         "agents": [
           {
@@ -40,7 +40,7 @@
           },
           {
             "name": "epic-validator",
-            "description": "Cold-validate one completed roadmap epic through a bounded direct audit, one remediation and confirmation review, sever…"
+            "description": "Cold-validate one completed roadmap epic through three bounded work-unit assessments, one remediation confirmation, sev…"
           },
           {
             "name": "independent-review",
@@ -104,7 +104,7 @@
           },
           {
             "name": "task-review",
-            "description": "Run and resolve Mulgae review for one complete roadmap task diff. Use when /aquarium:task-handler delegates review or w…"
+            "description": "Run and resolve one selected completion-review route for a complete roadmap task diff. Use when /aquarium:task-handler …"
           },
           {
             "name": "task-verify",
