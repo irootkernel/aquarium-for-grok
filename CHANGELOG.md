@@ -2,7 +2,7 @@
 
 This file records concise shipped outcomes of the Aquarium for Grok edition. Upstream outcomes live in the [Aquarium changelog](https://github.com/irootkernel/aquarium/blob/main/CHANGELOG.md).
 
-## Unreleased
+## v0.1.17 - 2026-09-24
 
 ### Changed
 
