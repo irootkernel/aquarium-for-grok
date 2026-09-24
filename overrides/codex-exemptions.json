@@ -1,10 +1,18 @@
 {
-  "references/development-contract.md": {
-    "source": "99c3ef3899c1d4a3750601cdbe1dead6643de7b05fe634de92df050ca165f8d3",
-    "shipped": "ce38bed06f4319d7c56aad89d9e151a34c7aaef081d9b9350752f2c2dcf6fb37"
+  "assets/podway/procedures/aquarium-goal-v2.yaml": {
+    "source": "a022cef14eb4f9112336c6dc20d35ebeb0abf7f08d586fc148353cb75a0d5986",
+    "shipped": "ff79d26126082527218a4df3035b0ef030392e7bc5adeac28e95e79f372a2f62"
+  },
+  "assets/podway/procedures/aquarium-task-v2.yaml": {
+    "source": "6a76bbc00cc8fca87a26acbfe00688c0302addef06a8494f875b2e6bd6e032d9",
+    "shipped": "503cdd74cc1a500d8ecf324d58ca67a5a5fe71328fa93d1a62b940606c0d627c"
+  },
+  "assets/podway/procedures/aquarium-validation-v2.yaml": {
+    "source": "78e14eff9899b2507b4a5a6f91c5353e84da792f284eb127bfe30cb8c37235e9",
+    "shipped": "e089992fca0f78c056db8457d40c6ffb0c3d3d88710fd1f028a5a679c87b1435"
   },
   "references/tool-catalog.md": {
-    "source": "5af2826d2d6934a6f1fc42074a7ae615c01be75dada2dfbe2bcc0425b3e6c1d4",
-    "shipped": "50bcdef6bc699115a98424352dc6cc8d3f213a11483498909eaaf6477b934183"
+    "source": "2d0602ede89f3076e0683418e3c3c9bb517c7da9b77e296ef7a57f6f1c6c4035",
+    "shipped": "1c322eec0cb6befc402280278ce6976f66d596e7c81800091b18f0943a5ded1e"
   }
 }

@@ -61,9 +61,9 @@ Written skill names use the plugin-qualified form `/aquarium:<skill>`. The table
 | `orca-review` | Run the same review contract through a requested native reviewer that Orca owns and supervises, then adjudicate locally. | Automatic when you name both a target and a reviewer, or `/aquarium:orca-review` |
 | `upgrade` | Adopt a newly released upstream Aquarium version in this generator repository, then publish the reviewed tag and GitHub Release. | `/aquarium:upgrade` with an optional released upstream version |
 
-The four design skills drive Ouroboros as a bounded leaf capability and need it installed and pinned to `>=0.51.1,<0.54.0`. They shape documents only and never implement.
+The four design skills drive Ouroboros as a bounded leaf capability and need it installed at `>=0.51.1`. They shape documents only and never implement.
 
-The development channel ships as plugin MCP: `.mcp.json` launches `tools/aquarium-dev/`. It is not a skill. Humanizer and `humanize-korean` install and diagnose at `~/.agents/skills/humanizer` and `~/.agents/skills/humanize-korean`.
+This edition does not ship `aquarium-dev` or `aquarium-status`. Those runtimes own machine-global state and stay with the upstream Aquarium edition. Humanizer and `humanize-korean` install and diagnose at `~/.agents/skills/humanizer` and `~/.agents/skills/humanize-korean`.
 
 `task-handler` loads seven phase skills in order — `task-plan`, `task-implement`, `task-refine`, `task-verify`, `task-document`, `task-review`, `task-close`. Invoke one directly only to resume that exact phase with its required task context.
 

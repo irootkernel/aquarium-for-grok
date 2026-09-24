@@ -4,6 +4,13 @@ This file records concise shipped outcomes of the Aquarium for Grok edition. Ups
 
 ## Unreleased
 
+### Changed
+
+- Adopt upstream Aquarium v0.1.17 and generate the Grok marketplace from that pin.
+- Keep completion-review route token `native-codex` byte-stable and run that route as fresh read-only Grok reviewer subagents: `spawn_subagent` with `background: true`, `isolation: none`, and the Git root as `cwd`, preferring `aquarium:independent-reviewer` on `grok-4.7` and falling back to `explore`. Independent Review stays the standalone entrypoint for the same dispatch.
+- Raise tool floors with the catalog: Mulgae v0.1.23 with Grok pinned to `grok-4.7`, Podway v0.2.11, Humanizer `>=v2.11.1`, im-not-ai `>=v2.3.2`, and Ouroboros `>=0.51.1` without an upper bound.
+- Stop shipping `tools/`, `aquarium-status`, and the development-channel contract. Those runtimes stay with the upstream Aquarium edition.
+
 ### Fixed
 
 - Keep the Grok `aquarium` install in front of a same-named Claude-compat plugin by `ln -sfn` of the `grok plugin list --json` `path` (not `source`) onto `~/.grok/plugins/aquarium` after marketplace update, and refuse Claude-path Aquarium skills in this generator's agent guidance.

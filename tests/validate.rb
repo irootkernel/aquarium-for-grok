@@ -119,7 +119,7 @@ if UPSTREAM_PLUGIN.directory?
   # from additions/; the sync manifest is the single source for the latter.
   upstream_skills = Pathname.glob(UPSTREAM_PLUGIN.join("skills/*/SKILL.md")).map { |p| p.dirname.basename.to_s }.sort
   addition_skills = sync_manifest.fetch("additions").map { |p| p[%r{\Askills/([^/]+)/SKILL\.md\z}, 1] }.compact
-  expected = (upstream_skills + addition_skills).sort
+  expected = (upstream_skills + addition_skills - %w[status]).sort
   generated = skill_paths.map { |p| p.dirname.basename.to_s }.sort
   assert(generated == expected, "generated skills do not match upstream plus additions: #{(generated - expected) | (expected - generated)}")
 end
@@ -135,8 +135,7 @@ FORBIDDEN_TEXT = ["$aquarium:", "$use-", "$create-", "$lore-", "$orca-cli", "req
 # `git -c user.name="$aquarium_commit_name"`, which the scan read as an unmapped
 # sigil; `sync.py` keeps the same list and requires each one to still occur
 # upstream.
-SIGIL_LITERALS = ["$aquarium_commit_name", "$aquarium_commit_email",
-                  "$aquarium_dev_branch", "$aquarium_dev_branch_status"].freeze
+SIGIL_LITERALS = ["$aquarium_commit_name", "$aquarium_commit_email"].freeze
 
 # Some upstream text names the Codex CLI as a third-party tool rather than as the
 # host — a Mulgae provider, a required CLI version — and stays correct here. Each
@@ -277,7 +276,8 @@ REQUIRED_TEXT = [
   ["skills/dev-setup/scripts/inspect_tools.py", "grok_mcp_entries"],
   ["skills/dev-setup/scripts/inspect_tools.py", "inspect_global_mcp_scope"],
   ["references/review-intent-contract.md", "Dispatch fresh read-only host-native reviewer subagents"],
-  ["tools/aquarium-dev/runtime_entry.py", "directory.parent.parent / \"plugin.json\""],
+  ["references/review-routing-contract.md", "`native-codex`"],
+  ["references/review-routing-contract.md", "spawn_subagent"],
   ["skills/dev-setup-global/scripts/inspect_global_tools.py", "--grok-home"],
   ["skills/dev-setup-global/scripts/inspect_ouroboros.py", "GROK_HOME"],
   ["skills/dev-setup-global/scripts/inspect_ouroboros.py", 'Path.home() / ".grok"'],
@@ -318,6 +318,19 @@ REQUIRED_TEXT.each do |relative, needle|
   assert(path.file?, "required-text target missing: #{relative}")
   assert(path.read.include?(needle), "required text missing from #{relative}: #{needle}")
 end
+
+# v0.1.17 leaves aquarium-dev and aquarium-status with the upstream edition.
+assert(!PLUGIN.join("tools").directory?, "tools/ must stay excluded")
+assert(!PLUGIN.join("skills/status").directory?, "the status skill must stay excluded")
+assert(!PLUGIN.join(".mcp.json").file?, "plugin MCP registration must stay excluded")
+assert(!PLUGIN.join("references/development-contract.md").file?, "the development-channel contract must stay excluded")
+global_inspector = PLUGIN.join("skills/dev-setup-global/scripts/inspect_global_tools.py").read
+assert(!global_inspector.include?('"aquarium-dev"'), "the global inspector must not select aquarium-dev")
+assert(!global_inspector.include?('"aquarium-status"'), "the global inspector must not select aquarium-status")
+assert(!global_inspector.include?("inspect_aquarium_status"), "the aquarium-status inspector must not ship")
+assert(!PLUGIN.join("skills/dev-setup-bundle/SKILL.md").read.include?("aquarium-status"), "the bundle skill must not record aquarium-status")
+task_procedure = PLUGIN.join("assets/podway/procedures/aquarium-task-v2.yaml").read
+assert(task_procedure.include?("native-codex"), "the native route token must stay byte-stable")
 
 # An override pin that already occurs in upstream cannot detect a stale
 # re-derivation that drops the edition-only sentence.
@@ -367,8 +380,10 @@ if inspection.file?
   assert(script.include?("def inspect_global_mcp_scope("), "inspection must own the Grok global MCP view")
   assert(!script.include?("def inspect_dolgorae("), "inspection must not diagnose Dolgorae")
   assert(!script.include?("--verify-dolgorae-release"), "inspection must not offer Dolgorae release verification")
+  assert(script.include?("def effective_codex_skill_root("), "inspection must keep the host skill-root helper")
+  assert(script.include?('Path.home() / ".grok"') && script.include?(' / "skills"'), "the host skill root must be ~/.grok/skills")
   %w[mcp_registration_probe classify_mulgae_mcp_scope classify_gaori_mcp_scope classify_ouroboros_registration
-     effective_mcp_registration effective_codex_skill_root inspect_dolgorae supported_dolgorae_version
+     effective_mcp_registration inspect_dolgorae supported_dolgorae_version
      valid_dolgorae_envelope dolgorae_capabilities_compatible is_arm64_macho].each do |helper|
     assert(!script.include?("def #{helper}("), "inspection must not keep the retired #{helper}")
   end
@@ -454,7 +469,7 @@ assert(
 # `COPIED_DIRECTORIES` is an allowlist with no counterpart check, so `hooks/`
 # appeared upstream and was dropped in silence until someone noticed.
 if UPSTREAM_PLUGIN.directory?
-  upstream_directories = UPSTREAM_PLUGIN.children.select(&:directory?).map { |p| p.basename.to_s } - [".codex-plugin"]
+  upstream_directories = UPSTREAM_PLUGIN.children.select(&:directory?).map { |p| p.basename.to_s } - [".codex-plugin", "tools"]
   upstream_directories.sort.each do |name|
     assert(PLUGIN.join(name).directory?, "generated plugin is missing upstream directory `#{name}/`")
   end
@@ -590,7 +605,7 @@ assert(
   "independent review must not reach across skill directories for the inspector"
 )
 
-AGENT_MODELS = %w[grok-4.6 grok-4.5].freeze
+AGENT_MODELS = %w[grok-4.7 grok-4.6 grok-4.5].freeze
 EDITING_TOOLS = %w[Edit Write MultiEdit NotebookEdit search_replace write_file write delete_file edit_notebook hashline_edit].freeze
 
 Pathname.glob(PLUGIN.join("agents/*.md")).sort.each do |path|

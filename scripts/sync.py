@@ -32,18 +32,22 @@ CODEX_EXEMPTIONS = OVERRIDES / "codex-exemptions.json"
 ADDITIONS = REPOSITORY / "additions"
 SYNC_MANIFEST = "sync-manifest.json"
 
-COPIED_DIRECTORIES = ("skills", "references", "assets", "hooks", "tools")
-COPIED_ROOT_FILES = (".mcp.json",)
+# v0.1.17 leaves the bundled runtimes with the upstream Codex edition.
+# `tools/` owns `~/.aquarium-dev` and the `~/.aquarium` status ledger, and a
+# second copy on the same machine would fight over that singleton state.
+# This edition ships skills, references, assets, and hooks only.
+COPIED_DIRECTORIES = ("skills", "references", "assets", "hooks")
+EXCLUDED_DIRECTORIES = ("tools",)
+EXCLUDED_SKILLS = ("status",)
+EXCLUDED_ROOT_FILES = (".mcp.json",)
+COPIED_ROOT_FILES: tuple[str, ...] = ()
 TEXT_SUFFIXES = (".md",)
 SCRIPT_SUFFIXES = (".py",)
 DATA_SUFFIXES = (".json", ".yaml")
 SCANNED_SUFFIXES = TEXT_SUFFIXES + SCRIPT_SUFFIXES + DATA_SUFFIXES
-# tools/ ships a suffix-less launcher and a hash-pinned requirements file.
-# Those bytes are not host-rewritten; scanning them would force a global
-# suffix expansion that then misses host needles in the rest of the tree.
-UNSCANNED_SHIPPED_PREFIXES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("tools/", ("", ".txt")),
-)
+# No unscanned shipped prefixes. The v0.1.15 tools/ launcher exception left
+# with the runtime exclusion.
+UNSCANNED_SHIPPED_PREFIXES: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 ADDED_PATHS: tuple[str, ...] = (
     "agents/independent-reviewer.md",
@@ -85,8 +89,8 @@ EXCLUDED_FILES: tuple[tuple[str, str], ...] = (
         "the Dolgorae capture contract; this edition's independent review dispatches Grok subagents",
     ),
     (
-        "skills/dev-setup-global/scripts/verify_dolgorae_release.py",
-        "Dolgorae GitHub release verification; this edition does not diagnose Dolgorae",
+        "references/development-contract.md",
+        "the aquarium-dev channel contract; this edition does not ship that runtime",
     ),
 )
 
@@ -100,16 +104,6 @@ SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "Orca scope and ask for an explicitly selected supported target. Independent "
         "Review on this host also cannot capture `workspace` or `dirty`. Never stage "
         "paths or reinterpret state merely to manufacture an Orca Review target.",
-    ),
-    (
-        "Dolgorae remains unenrolled until its repository creates and validates the approved "
-        "producer commit, enrolls that canonical checkout, and publishes the exact committed "
-        "generation. Before enrollment, the launcher resolves the required global Dolgorae; "
-        "if neither generation exists, it fails closed and requests `$aquarium:dev-setup-global`.",
-        "Dolgorae remains an optional development producer until its repository creates and "
-        "validates the approved producer commit, enrolls that canonical checkout, and publishes "
-        "the exact committed generation. A missing global Dolgorae is not fail-closed readiness "
-        "and is not diagnosed or installed by `/aquarium:dev-setup-global`.",
     ),
     ("$aquarium:", "/aquarium:"),
     (
@@ -136,7 +130,7 @@ SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
     ("Codex home", "Grok home"),
     ("Codex objective", "Grok todo-list objective"),
     ("Codex tool contract", "Grok todo-list contract"),
-    ("Restart Codex", "Restart Grok"),
+
     (
         "Use the available agent delegation surface to dispatch fresh subagents for independent risk clusters.",
         "Use `spawn_subagent` to dispatch fresh subagents for independent risk clusters.",
@@ -163,9 +157,11 @@ SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "The bundled hook is a local guardrail, not complete enforcement: it detects direct shell `git commit` invocations in roadmap repositories, while indirect commits performed by other tools may not pass through that boundary. It is inert until the plugin is trusted.",
     ),
     (
-        "Use this contract for one static, read-only review through `/aquarium:orca-review`. "
-        "Read [review-intent-contract.md](review-intent-contract.md) for the Review Brief "
-        "and change-versus-completion semantics, then read "
+        "Use this contract for one static, read-only review through `/aquarium:orca-review`, "
+        "including an explicitly approved delegation from a Task, Epic, or validation handler. "
+        "Read [review-intent-contract.md](review-intent-contract.md) for the Review Brief and "
+        "change-versus-completion semantics, [review-routing-contract.md](review-routing-contract.md) "
+        "for embedded selection and evidence, then "
         "[finding-disposition.md](finding-disposition.md) for adjudication and remediation. "
         "The Dolgorae-backed `/aquarium:independent-review` route is temporarily disabled "
         "and stops before setup or source transmission; its historical target meanings "
@@ -297,12 +293,16 @@ SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "Orca, Mulgae, or another backend when native delegation is unavailable.",
         "## Use a native Grok review subagent\n"
         "\n"
-        "The host's `spawn_subagent` tool provides the fresh native delegation this route\n"
-        "requires, and `/aquarium:independent-review` invokes it on an explicit request.\n"
-        "Give a dispatched subagent the same Review Brief, exact target, and approved\n"
-        "context that another enabled static route would receive. Do not invent a\n"
-        "delegation tool or silently choose Orca, Mulgae, or another backend when that\n"
-        "dispatch is unavailable.",
+        "The `native-codex` route dispatches fresh read-only Grok reviewer subagents\n"
+        "through `spawn_subagent` with `background: true`, `isolation: none`, and `cwd`\n"
+        "set to the exact Git root. Prefer `aquarium:independent-reviewer` and fall back\n"
+        "to `explore`. Launch every reviewer in one message and collect each result with\n"
+        "`get_command_or_subagent_output`. Give each the same Review Brief, exact target,\n"
+        "and approved context that another enabled static route would receive. Do not\n"
+        "invent a delegation tool or silently choose Orca, Mulgae, or another backend\n"
+        "when that dispatch is unavailable. `/aquarium:independent-review` is the\n"
+        "standalone entrypoint for this same dispatch; do not invoke it from inside a\n"
+        "handler.",
     ),
     (
         "Use only the lifecycle and evidence the host actually provides. Do not describe\n"
@@ -312,13 +312,14 @@ SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "Use only the lifecycle and evidence the host actually provides. Do not describe\n"
         "this route as Dolgorae, Orca, or Mulgae, and do not claim an immutable capture,\n"
         "publication, settlement, or recovery guarantee that was not observed. On this\n"
-        "host the route is `/aquarium:independent-review`, and its freshness guarantee\n"
-        "is only the reviewer's unshared context.",
+        "host the workflow route is `native-codex`, dispatched through Grok\n"
+        "`spawn_subagent`, and its freshness guarantee is only the reviewer's unshared\n"
+        "context.",
     ),
     (
         "from Mulgae Review, Orca Review, an explicitly selected native Codex review "
-        "subagent, or the dormant Independent Review contract if that route is "
-        "re-enabled.",
+        "subagent, a workflow review waiver, or the dormant Independent Review contract "
+        "if that route is re-enabled.",
         "from Mulgae Review, Orca Review, or the fresh reviewer subagents dispatched "
         "by `/aquarium:independent-review`.",
     ),
@@ -337,56 +338,120 @@ SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         "`/aquarium:task-review`, standalone `/aquarium:independent-review`, "
         "`/aquarium:mulgae-review`, or `/aquarium:orca-review` is report-only.",
     ),
+    (
+        "Never invoke `/aquarium:independent-review`; invoke "
+        "`/aquarium:orca-review` only through an explicitly selected "
+        "authorized route.",
+        "`/aquarium:independent-review` is the standalone native-subagent "
+        "entrypoint; do not invoke it inside a handler flow, and invoke "
+        "`/aquarium:orca-review` only through an explicitly selected "
+        "authorized route.",
+    ),
+    (
+        "For `native-codex`, require fresh host delegation.",
+        "For `native-codex`, dispatch fresh read-only Grok reviewer subagents through "
+        "`spawn_subagent` with `background: true`, `isolation: none`, and `cwd` set to "
+        "the exact Git root, preferring `aquarium:independent-reviewer` and falling back "
+        "to `explore`, and collect each result with `get_command_or_subagent_output`.",
+    ),
+    (
+        "For `native-codex`, create one fresh host subagent",
+        "For `native-codex`, dispatch fresh read-only Grok reviewer subagents through "
+        "`spawn_subagent` with `background: true`, `isolation: none`, and `cwd` set to "
+        "the exact Git root, preferring `aquarium:independent-reviewer` and falling back "
+        "to `explore`, then collect each result with `get_command_or_subagent_output`,",
+    ),
+    (
+        "native Codex through one fresh report-only host subagent",
+        "native Grok through fresh read-only reviewer subagents on `spawn_subagent` "
+        "(`background: true`, `isolation: none`, Git-root `cwd`), preferring "
+        "`aquarium:independent-reviewer` and falling back to `explore`",
+    ),
+    (
+        "user-global preference. Independent Review remains disabled and is not a\n"
+        "selectable route.",
+        "user-global preference. `/aquarium:independent-review` stays a standalone "
+        "entrypoint and is not itself a selectable workflow route; the in-flow native "
+        "route is `native-codex`.",
+    ),
+    (
+        "Pass the normalized `shared_tools` union, manifest digest, requesting skill, and\n"
+        "the infrastructure component `aquarium-status` to `/aquarium:dev-setup-global`.\n"
+        "The global skill maps each selected name to one `--component <name>` inspector\n"
+        "argument and runs no other component. `aquarium-status` is common bundle\n"
+        "infrastructure, not a new manifest tool, so this preserves\n"
+        "`aquarium.dev-setup-bundle/v1` and its existing vocabulary.",
+        "Pass the normalized `shared_tools` union, manifest digest, and requesting skill\n"
+        "to `/aquarium:dev-setup-global`. The global skill maps each selected name to\n"
+        "one `--component <name>` inspector argument and runs no other component. This\n"
+        "edition bundles no infrastructure runtime, so the pass-through adds nothing and\n"
+        "preserves `aquarium.dev-setup-bundle/v1` and its existing vocabulary.",
+    ),
+    (
+        "Require rules and skills in the current Grok home, the matching MCP package, and a `home_binding` to that same home; shared `~/.agents/skills` copies prevent readiness until migrated.",
+        "Require packaged Ouroboros skills under `~/.agents/skills` and MCP in `~/.grok/config.toml`. A byte-identical shared-root copy is canonical on this host. Only a conflicting copy degrades readiness.",
+    ),
+    ("Native Codex", "Native Grok"),
+    ("native Codex", "native Grok"),
+    (
+        "| `native-codex` | Requires explicit selection and fresh host delegation. The host owns the subagent lifecycle and provenance. |",
+        "| `native-codex` | Requires explicit selection. Dispatch fresh read-only Grok "
+        "reviewer subagents through `spawn_subagent` with `background: true`, "
+        "`isolation: none`, and `cwd` set to the exact Git root, preferring "
+        "`aquarium:independent-reviewer` and falling back to `explore`. Collect each "
+        "result with `get_command_or_subagent_output`. The host owns the subagent "
+        "lifecycle and provenance. |",
+    ),
+    (
+        "Native Grok\nrequires fresh host delegation.",
+        "Native Grok dispatches fresh read-only reviewer subagents through "
+        "`spawn_subagent` with `background: true`, `isolation: none`, and `cwd` set to "
+        "the exact Git root, preferring `aquarium:independent-reviewer` and falling "
+        "back to `explore`.",
+    ),
+    (
+        "For each ready target, after manifest revalidation and canonical identity freeze,\n"
+        "read its current row through `aquarium-status show --format json` and create one\n"
+        "`aquarium-production-status-attempt/v1` with exactly `schema`, a new UUIDv4\n"
+        "`attempt_id`, that `expected_row_revision` or 0, the canonical `git_root`, the\n"
+        "project label equal to the canonical Git root's final NFC-normalized path\n"
+        "component, the UTC `started_at`, and a scoped component `scope`. Its component\n"
+        "list is the sorted unique effective `tools` list plus `agents-guidance` exactly\n"
+        "when the effective guidance policy is `propose`. A bundle target is never a\n"
+        "full attempt, because the manifest is an explicit component selection; this\n"
+        "prevents it from advancing `last_full_ready`. The\n"
+        "[production-status specification](../../../../docs/specs/production-status.md)\n"
+        "owns this closed envelope. Pass it with the requesting\n"
+        "skill, manifest digest, target index, canonical Git root, complete effective tool\n"
+        "list, explicit local MCP overrides, and guidance policy to `/aquarium:dev-setup`.\n"
+        "The repository skill interprets the list as target intent, preserves that attempt\n"
+        "unchanged, and never repeats global installation or freshness work.",
+        "For each ready target, after manifest revalidation and canonical identity freeze,\n"
+        "pass the requesting skill, manifest digest, target index, canonical Git root,\n"
+        "complete effective tool list, explicit local MCP overrides, and guidance policy to\n"
+        "`/aquarium:dev-setup`. This edition does not create or record a production-status\n"
+        "attempt. The repository skill interprets the list as target intent and never\n"
+        "repeats global installation or freshness work.",
+    ),
+    (
+        "Once a target enters `dev-setup`, accept its recording receipt only when the\n"
+        "attempt ID, canonical root, predecessor row revision, and resulting revisions\n"
+        "match the handoff contract. Never record that target a second time. If a target\n"
+        "settles before entry, complete and record the bundle-owned original attempt once.\n"
+        "On recording failure, preserve the exact record-only retry request and never\n"
+        "repeat target mutations. Validate the closed recording-result fields and problem\n"
+        "codes against the same specification. Continue independent targets.",
+        "Once a target enters `dev-setup`, continue independent targets after its result.\n"
+        "This edition does not accept or retry a production-status recording receipt.",
+    ),
 )
 
 SCRIPT_SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
-    (
-        "import shutil\n"
-        "import stat\n"
-        "import subprocess\n"
-        "import sys\n"
-        "import time\n"
-        "from pathlib import Path\n"
-        "from typing import Any\n"
-        "\n"
-        "try:\n"
-        "    import yaml\n"
-        "except ModuleNotFoundError as error:\n"
-        '    if error.name != "yaml":\n'
-        "        raise\n"
-        "    yaml = None  # type: ignore[assignment]\n"
-        "\n"
-        "GLOBAL_SCRIPT_DIRECTORY = str(\n"
-        '    Path(__file__).resolve().parents[2] / "dev-setup-global/scripts"\n'
-        ")\n"
-        "if GLOBAL_SCRIPT_DIRECTORY not in sys.path:\n"
-        "    sys.path.insert(0, GLOBAL_SCRIPT_DIRECTORY)\n"
-        "\n"
-        "try:\n"
-        "    import verify_dolgorae_release as dolgorae_release\n"
-        "except ModuleNotFoundError as error:\n"
-        '    if error.name != "verify_dolgorae_release":\n'
-        "        raise\n"
-        "    dolgorae_release = None\n",
-        "import shutil\n"
-        "import subprocess\n"
-        "import sys\n"
-        "import time\n"
-        "from pathlib import Path\n"
-        "from typing import Any\n"
-        "\n"
-        "try:\n"
-        "    import yaml\n"
-        "except ModuleNotFoundError as error:\n"
-        '    if error.name != "yaml":\n'
-        "        raise\n"
-        "    yaml = None  # type: ignore[assignment]\n",
-    ),
     ("InvalidCodexHome", "InvalidHostHome"),
     ("per-Codex-home", "per-Grok-home"),
     ("Ouroboros Codex home", "Ouroboros Grok home"),
     ("Codex home", "Grok home"),
-    ("configures Codex", "configures Grok"),
+
     (
         "    environment = os.environ.copy()\n"
         "    for name in tuple(environment):\n"
@@ -404,10 +469,7 @@ SCRIPT_SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         '    environment["LANG"] = "C"\n'
         '    environment["LC_ALL"] = "C"\n',
     ),
-    (
-        'REQUIRED_GLOBAL_COMMANDS = frozenset({"podway", "mulgae", "gaori", "dolgorae"})\n',
-        'REQUIRED_GLOBAL_COMMANDS = frozenset({"podway", "mulgae", "gaori"})\n',
-    ),
+
     (
         '            "use-dolgorae": Path.home() / ".agents/skills/use-dolgorae",\n',
         "",
@@ -530,10 +592,27 @@ SCRIPT_SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
         ")\n",
     ),
     (
-        '    manifest = directory.parent.parent / ".codex-plugin/plugin.json"\n',
-        '    manifest = directory.parent.parent / "plugin.json"\n',
+        '    "ouroboros",\n'
+        '    "aquarium-dev",\n'
+        '    "aquarium-status",\n'
+        ")",
+        '    "ouroboros",\n'
+        ")",
     ),
-    ("$aquarium:", "/aquarium:"),
+    (
+        '"humanize-korean": effective_codex_skill_root() / "humanize-korean",',
+        '"humanize-korean": Path.home() / ".agents/skills/humanize-korean",',
+    ),
+    (
+        "        root = effective_codex_skill_root()\n"
+        '        target = root / "humanize-korean"\n'
+        '        shared_root = Path.home() / ".agents/skills"\n'
+        "        roots = (root, shared_root) if root != shared_root else (root,)\n",
+        "        root = effective_codex_skill_root()\n"
+        '        shared_root = Path.home() / ".agents/skills"\n'
+        '        target = shared_root / "humanize-korean"\n'
+        "        roots = (shared_root, root) if root != shared_root else (shared_root,)\n",
+    ),
 )
 
 DATA_SUBSTITUTIONS: tuple[tuple[str, str], ...] = (
@@ -564,7 +643,8 @@ REQUIRED_TEXT: tuple[tuple[str, str], ...] = (
         "references/review-intent-contract.md",
         "Dispatch fresh read-only host-native reviewer subagents",
     ),
-    ("tools/aquarium-dev/runtime_entry.py", 'directory.parent.parent / "plugin.json"'),
+    ("references/review-routing-contract.md", "`native-codex`"),
+    ("references/review-routing-contract.md", "spawn_subagent"),
     ("skills/dev-setup-global/scripts/inspect_global_tools.py", "--grok-home"),
     ("skills/dev-setup-global/scripts/inspect_ouroboros.py", "GROK_HOME"),
     ("skills/dev-setup-global/scripts/inspect_ouroboros.py", 'Path.home() / ".grok"'),
@@ -627,8 +707,6 @@ SIGIL = re.compile(r"\$[a-z][a-z0-9:_-]*")
 SIGIL_LITERALS: tuple[str, ...] = (
     "$aquarium_commit_name",
     "$aquarium_commit_email",
-    "$aquarium_dev_branch",
-    "$aquarium_dev_branch_status",
 )
 
 
@@ -1102,7 +1180,7 @@ def inspect_ouroboros_host_skills() -> dict[str, Any]:
 
 def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any]:
     tool = base_tool("ooo")
-    tool["supported_range"] = ">=0.51.1,<0.54.0"
+    tool["supported_range"] = ">=0.51.1"
     tool["mcp_registration"] = ouroboros_mcp_registration(repository, tool["executable"])
     tool["host_integration"] = inspect_ouroboros_host_skills()
     if not tool["installed"]:
@@ -1192,6 +1270,11 @@ def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any
         tuple(reading.get("disabled_servers") or ()),
     )
 ''',
+            "effective_codex_skill_root": r'''def effective_codex_skill_root() -> Path:
+    grok_home = os.environ.get("GROK_HOME")
+    root = Path(grok_home).expanduser() if grok_home else Path.home() / ".grok"
+    return (root if root.is_absolute() else Path.cwd() / root) / "skills"
+''',
         },
         "delete": [
             "mcp_registration_probe",
@@ -1202,7 +1285,6 @@ def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any
             "missing_mcp_scope",
             "failed_mcp_scope",
             "codex_version_from_output",
-            "effective_codex_skill_root",
             "inspect_dolgorae",
             "supported_dolgorae_version",
             "valid_dolgorae_envelope",
@@ -1214,8 +1296,9 @@ def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any
             "inspect_gaori_mcp": "2741e3cc194d726601f5c4d5d1d5d2aa834ce4ec5540f1c9fe245d52d735290d",
             "ouroboros_direct_launcher_matches": "cd3da17085733d6f01f0b9f53ff6f9d2c46ed1f298ae9dc93cdc292f4b915fea",
             "ouroboros_isolated_launcher_matches": "ef4368b2f583ba6c88f652e3a59b3f6fa4661dc71f4f77fa1a697c2810913e91",
-            "inspect_ouroboros": "d4ab5bb6dc7aac2c7623ac41ccb6c65a9f4fcc551d145508b7bdcc7230599c73",
+            "inspect_ouroboros": "3547f75835b2dd0e6421aacd8ace98ed624606cbccd7dcd20468a777a2e51d42",
             "inspect_global_mcp_scope": "970e363c6a258a8b6d12c420f9669273810791812b2169591221f4eacb2c6254",
+            "effective_codex_skill_root": "ecacc0d54adb0249520a98ea2f0849a0b43daf61a81d750306b2b534b7a65a81",
         },
     },
     "skills/independent-review/scripts/inspect_review_target.py": {
@@ -1418,46 +1501,6 @@ def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any
         tools["humanizer"] = inspector.inspect_humanizer()
     if "im-not-ai" in requested_components:
         tools["im-not-ai"] = inspector.inspect_im_not_ai()
-    if "aquarium-dev" in requested_components:
-        script = Path(__file__).resolve().parents[3] / "tools/aquarium-dev/install.py"
-        try:
-            probe = subprocess.run(
-                [sys.executable, "-B", str(script), "diagnose"],
-                cwd=neutral_cwd,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-                check=False,
-            )
-            if probe.returncode:
-                failure = {
-                    "status": "unverifiable",
-                    "reason": "probe_failed",
-                    "exit_code": probe.returncode,
-                    "problem": probe.stderr.strip(),
-                }
-                try:
-                    failure["diagnostic"] = json.loads(probe.stderr)
-                except ValueError:
-                    pass
-                tools["aquarium-dev"] = failure
-            else:
-                tools["aquarium-dev"] = json.loads(probe.stdout)
-        except subprocess.TimeoutExpired as error:
-            tools["aquarium-dev"] = {
-                "status": "unverifiable",
-                "reason": "probe_timeout",
-                "timeout_seconds": timeout_seconds,
-                "problem": str(error),
-            }
-        except (OSError, ValueError, subprocess.SubprocessError) as error:
-            tools["aquarium-dev"] = {
-                "status": "unverifiable",
-                "reason": "invalid_json"
-                if isinstance(error, ValueError)
-                else "probe_failed",
-                "problem": str(error),
-            }
     tools = {name: tools[name] for name in selected_components}
     return {
         "schema_version": SCHEMA_VERSION,
@@ -1565,11 +1608,11 @@ def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any
         return 1
 ''',
         },
-        "delete": [],
+        "delete": ["inspect_aquarium_status"],
         "upstream": {
-            "inspect_global": "98ec89a97f3de0a46505fbfe18115d8729f3c804fde256db7792c918614f5cc6",
-            "parse_arguments": "9f5204165840dd7e36e6e5ab601aeab713db5b891bbc6bfbc2e9b8dcc8c5fba3",
-            "main": "8ecc2a6e6f7a61000ac7649c5706d3448ac2b3db48c48a664696102d02f42486",
+            "inspect_global": "ae815c2aa3a18d02a553034a55afa726ff24b3e196202fc9bcd6212c525d7e81",
+            "parse_arguments": "1c5d3fd7a15ba43d387fb6df71a3b70396ab5d6877799720c39974a2c4c69bad",
+            "main": "01ea8db4cae0b8626fb7c526ae0a3f32f0714e5867e8f77b77164066c5778e33",
         },
     },
     "skills/dev-setup-global/scripts/inspect_ouroboros.py": {
@@ -1697,6 +1740,8 @@ def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any
     rows = []
     cli = inspector.inspect_ouroboros_cli(cwd, timeout)
     assets = packaged_assets(inspector, cli, cwd, timeout)
+    shared_skills = legacy_skills(assets)
+    shared_conflicts = shared_skill_conflicts(inspector, assets, shared_skills)
     host = inspector.inspect_ouroboros(cwd, timeout)
     for home in homes:
         if home in failures:
@@ -1708,6 +1753,9 @@ def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any
                 )
             except (OSError, ValueError, RuntimeError):
                 row = unavailable_home(home, current, "home_inspection_failed")
+        if shared_conflicts and row["status"] == "configured":
+            row["status"] = "degraded"
+            row["reason"] = "shared_skill_conflict"
         rows.append(row)
     freshness = (
         release_freshness(inspector, cli, timeout)
@@ -1736,8 +1784,38 @@ def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any
         if all(row["status"] == "configured" for row in rows)
         else "degraded",
         "homes": rows,
-        "legacy_shared_skills": legacy_skills(assets),
+        "legacy_shared_skills": shared_skills,
+        "shared_skill_conflicts": shared_conflicts,
     }
+''',
+            "shared_skill_conflicts": r'''def shared_skill_conflicts(
+    inspector: Any, expected: dict[str, str] | None, legacy: list[str]
+) -> list[str]:
+    if expected is None:
+        return []
+    root = Path.home() / ".agents" / "skills"
+    conflicts: set[str] = set()
+    for relative in expected:
+        parts = Path(relative).parts
+        if len(parts) != 3 or parts[0] != "skills" or parts[2] != "SKILL.md":
+            continue
+        name = parts[1].removeprefix("ouroboros-")
+        candidate = root / name
+        if str(candidate) in legacy:
+            continue
+        try:
+            skill = candidate / "SKILL.md"
+            if candidate.is_symlink() or skill.is_symlink():
+                conflicts.add(str(candidate))
+                continue
+            if not skill.is_file() or inspector.frontmatter_name(skill) != name:
+                continue
+            digest = hashlib.sha256(skill.read_bytes()).hexdigest()
+            if digest != expected[relative]:
+                conflicts.add(str(candidate))
+        except OSError:
+            conflicts.add(str(candidate))
+    return sorted(conflicts)
 ''',
         },
         "delete": [],
@@ -1745,7 +1823,8 @@ def inspect_ouroboros(repository: Path, timeout_seconds: float) -> dict[str, Any
             "discover_homes": "bbb5cd122fd667ac43ad97718052e5a4e3ae18045a5223e49f73cb16f930803a",
             "unavailable_home": "c1ba59f192b967fb5ebb3e06f29b88231a5807eb7a5cb7a2627a05485a1ecde0",
             "inspect_home": "46e99600019f5de387c82f9218d52aed8493a94f5553a88b963a60b84e0c0eb5",
-            "inspect_ouroboros": "f71acd6e15dbb4bd0c786f0b025715d705311d8592a154ecdca716b22f1a5aa0",
+            "inspect_ouroboros": "67867f97622438d3169bbdd0bf6d90092c8169741693129913b9d2ca0543d48b",
+            "shared_skill_conflicts": "a8d1eaa6ea4cd780373d97db66c839d7454b92ee717297ffa89ebea950a1f7eb",
         },
     },
 }
@@ -1856,12 +1935,13 @@ def require_upstream() -> None:
 def check_upstream_directories() -> None:
     """Refuse to generate when upstream grows a directory nobody decided about.
 
-    `COPIED_DIRECTORIES` is an allowlist with no counterpart check, so `hooks/`
-    appeared upstream and was dropped in silence. Whether a new directory belongs
-    in a Grok artifact is a decision, and skipping it is not a safe default.
-    Root-level files are the same class: a new `.mcp.json` would otherwise vanish.
+    `COPIED_DIRECTORIES` is an allowlist with no counterpart check, so a new
+    directory upstream would otherwise be dropped in silence. Whether it
+    belongs in a Grok artifact is a decision, and skipping it is not a safe
+    default. `EXCLUDED_DIRECTORIES` entries are decided exclusions.
+    Root-level files are the same class.
     """
-    known = set(COPIED_DIRECTORIES) | {".codex-plugin"}
+    known = set(COPIED_DIRECTORIES) | set(EXCLUDED_DIRECTORIES) | {".codex-plugin"}
     unknown = sorted(
         path.name
         for path in UPSTREAM_PLUGIN.iterdir()
@@ -1876,7 +1956,7 @@ def check_upstream_directories() -> None:
     unknown_files = sorted(
         path.name
         for path in UPSTREAM_PLUGIN.iterdir()
-        if path.is_file() and path.name not in COPIED_ROOT_FILES
+        if path.is_file() and path.name not in set(COPIED_ROOT_FILES) | set(EXCLUDED_ROOT_FILES)
     )
     if unknown_files:
         raise SyncError(
@@ -1899,16 +1979,29 @@ def check_upstream_directories() -> None:
 def check_excluded_files() -> None:
     """Refuse an exclusion whose target no longer exists upstream.
 
-    An exclusion names a file upstream ships and this artifact does not. Once
-    upstream renames or removes that file the entry is dead, and a dead entry
+    An exclusion names content upstream ships and this artifact does not. Once
+    upstream renames or removes that target the entry is dead, and a dead entry
     would hide a differently named replacement behind a decision nobody made.
     """
+    missing: list[str] = []
+    for name in EXCLUDED_DIRECTORIES:
+        if not (UPSTREAM_PLUGIN / name).is_dir():
+            missing.append(f"directory `{name}/`")
+    for name in EXCLUDED_SKILLS:
+        if not (UPSTREAM_PLUGIN / "skills" / name).is_dir():
+            missing.append(f"skill `{name}`")
+    for name in EXCLUDED_ROOT_FILES:
+        if not (UPSTREAM_PLUGIN / name).is_file():
+            missing.append(f"root file `{name}`")
     for relative, _reason in EXCLUDED_FILES:
         if not (UPSTREAM_PLUGIN / relative).is_file():
-            raise SyncError(
-                f"exclusion targets `{relative}`, which no longer exists upstream; "
-                "remove the exclusion or retarget it"
-            )
+            missing.append(f"file `{relative}`")
+    if missing:
+        raise SyncError(
+            "recorded exclusions no longer exist upstream: "
+            + ", ".join(missing)
+            + "; remove each exclusion or retarget it"
+        )
 
 
 def check_sigil_literals() -> None:
@@ -2038,6 +2131,11 @@ def copy_tree(destination: Path) -> None:
                 f"upstream is missing `{name}`; refuse to skip a copied root file"
             )
         shutil.copy2(source, destination / name)
+    for name in EXCLUDED_SKILLS:
+        target = destination / "skills" / name
+        if not target.is_dir():
+            raise SyncError(f"excluded skill `{name}` was not copied into the staging tree")
+        shutil.rmtree(target)
     reject_symlinks(destination)
 
 

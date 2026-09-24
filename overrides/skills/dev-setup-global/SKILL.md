@@ -11,7 +11,7 @@ Own installation, exact-upstream freshness, upgrades, services, and global Grok 
 
 Aquarium plugin installation and updates belong to the host's plugin-management flow. A request to install or update only the Aquarium plugin, including a specific version, does not select this skill. If this skill was selected for that request, return to the host's plugin-management flow before reading the tool catalog or running any diagnostic. Do not infer a global tool setup request from plugin installation.
 
-Use this skill for an explicit global development setup request or a workflow continuation naming a global component that needs attention. An explicit request to install or update the optional `aquarium-dev` runtime remains in scope; installing or updating the Aquarium plugin alone does not request that runtime.
+Use this skill for an explicit global development setup request or a workflow continuation naming a global component that needs attention. A request to install, update, or diagnose `aquarium-dev` or `aquarium-status` is outside this edition. Those runtimes are owned by the upstream Aquarium edition. Report that boundary and do not select an inspector component for them. Installing or updating the Aquarium plugin alone does not request either runtime.
 
 Read the selected sections of [the shared tool catalog](../../references/tool-catalog.md). Do not read repository-local `.podway`, `.mulgae`, `.gaori`, `.sorage`, `.grok`, AGENTS.md, or CLAUDE.md as global setup evidence.
 
@@ -19,7 +19,7 @@ Read the selected sections of [the shared tool catalog](../../references/tool-ca
 
 1. On a direct invocation without a component list, select every supported global component. On a scoped continuation, select only the named components and their direct prerequisites.
 2. A direct invocation authorizes bounded read-only official metadata and raw-file freshness requests for all selected components. A scoped continuation authorizes only its selected sources. Disclose the official endpoints before contact.
-3. Resolve this skill's directory and run `python3 <skill-directory>/scripts/inspect_global_tools.py` on a direct unscoped invocation. For a scoped continuation, add one `--component <name>` argument for each selected component in catalog order, and run no unselected component probe. Do not pass `--verify-dolgorae-release` or select Dolgorae; this edition does not diagnose or install Dolgorae.
+3. Resolve this skill's directory and run `python3 <skill-directory>/scripts/inspect_global_tools.py` on a direct unscoped invocation. For a scoped continuation, add one `--component <name>` argument for each selected component in catalog order, and run no unselected component probe. Do not pass a Dolgorae, `aquarium-dev`, or `aquarium-status` component; this edition does not diagnose or install them.
 
    When Ouroboros is selected, also add `--verify-ouroboros-release`. Use the catalog's Grok home discovery and readiness contract.
 
@@ -34,12 +34,11 @@ If a freshness lookup, download, validation, or comparison fails, report `freshn
 
 - Sanho, Mulgae, Gaori, Sorage, and Podway user-global CLIs.
 - `use-sanho`, `use-mulgae`, `use-gaori`, `use-gaori-status`, `use-sorage`, and `use-podway` under `~/.agents/skills`.
-- Mulgae and Gaori user-global MCP registrations in `~/.grok/config.toml`.
+- Mulgae and Gaori user-global MCP registrations in `~/.grok/config.toml`. Call them through `search_tool` then `use_tool`.
 - Podway's per-user production daemon and Sorage's minimal user-global initialization.
 - Lora's `lore-commits` and `lore-query`, upstream Deslop, Humanizer at `~/.agents/skills/humanizer`, and im-not-ai's `humanize-korean` skill at `~/.agents/skills/humanize-korean`.
-- Ouroboros package version, packaged skills under `~/.agents/skills`, MCP runtime in `~/.grok/config.toml`, and live exposure when safely observable.
-- The optional `aquarium-dev` CLI and MCP runtime bundled with Aquarium. Install and update it only on an explicit request; it is not part of production-binary readiness. Its MCP registration belongs to the plugin `.mcp.json`, not the global MCP table, and it has no paired skill.
-- Aquarium production-binary readiness requires supported global Podway, Mulgae, and Gaori executables and fails closed when any is missing. Sanho remains optional and is excluded from this baseline. This edition does not diagnose or install Dolgorae.
+- Ouroboros package version, packaged skills under `~/.agents/skills`, MCP runtime in `~/.grok/config.toml`, and live exposure when safely observable. Configure the runtime with `ooo setup --runtime grok`.
+- Aquarium production-binary readiness requires supported global Podway, Mulgae, and Gaori executables and fails closed when any is missing. Sanho remains optional and is excluded from this baseline. This edition does not diagnose or install Dolgorae, `aquarium-dev`, or `aquarium-status`.
 
 Do not install provider CLIs, authenticate, read credentials, contact providers, transmit repository source, initialize repository workspaces, change project MCP, edit repository guidance, start tests or reviews, or invoke Ouroboros workflows.
 
@@ -49,11 +48,11 @@ Use one exact supported release tag or disclosed full commit SHA according to th
 
 For each selected paired or third-party skill, compare the verified source with its canonical target. Treat missing or extra files, different bytes, invalid frontmatter, symlinks, and duplicate installations as independent gaps.
 
-Apply this duplicate rule to shared-location skills. Canonical writing-skill targets are `~/.agents/skills/humanizer` and `~/.agents/skills/humanize-korean`. When another copy exists, report the duplicate risk and never create a known duplicate. Do not propose installation at the canonical target until the user separately approves removal or migration of the alternate copy so that one canonical target remains.
+Apply this duplicate rule to shared-location skills. Canonical writing-skill targets are `~/.agents/skills/humanizer` and `~/.agents/skills/humanize-korean`. Grok also loads `~/.grok/skills` or `$GROK_HOME/skills`. A byte-identical copy on the other native root is not a duplicate. A conflicting copy is. Do not propose installation at the canonical target until the user separately approves removal or migration of the conflicting copy so that one canonical target remains.
 
 `dev-setup` trusting an existing canonical path is not freshness evidence.
 
-Ouroboros update diagnosis reports installed, latest stable, and latest supported versions. Its CLI is user-global; install packaged skills under `~/.agents/skills` and register MCP in `~/.grok/config.toml`. Keep package freshness and live runtime evidence separate. Never cross the supported release range automatically.
+Ouroboros update diagnosis reports installed, latest stable, and latest supported versions. Its CLI is user-global; install packaged skills under `~/.agents/skills` and register MCP in `~/.grok/config.toml`. A byte-identical shared-root copy is this host's canonical installation. Only a non-matching name conflict degrades readiness. Keep package freshness and live runtime evidence separate. Never install below the minimum supported version. There is no upper bound.
 
 ## Respect Host Mode and Approval Boundaries
 
@@ -65,7 +64,7 @@ Before every persistent action:
 
 1. Show the exact command, endpoints, targets, changed paths, expected side effects, and verification.
 2. Establish the shared backup policy before the first overwrite or removal.
-3. Obtain action-specific approval. For Ouroboros, one exact proposal and approval may cover the CLI upgrade, all listed home updates, MCP adjustments, and identified legacy migration. Do not repeat approval for covered actions.
+3. Obtain action-specific approval through `ask_user_question` when available. For Ouroboros, one exact proposal and approval may cover the CLI upgrade, skill installation, MCP adjustments, and identified legacy migration. Do not repeat approval for covered actions.
 4. Re-read the target and invalidate approval if its snapshot changed.
 5. Execute only the approved action and verify through the owning CLI and exact tree comparison.
 
@@ -77,8 +76,8 @@ Never use `sudo`, `--force`, unapproved removal, provider invocation, source tra
 
 ## Bundle Intake
 
-Accept a bounded `dev-setup-bundle` handoff containing the manifest digest and union of selected global components. Prepare each global component at most once. For Ouroboros, prepare the CLI once and the Grok skill/MCP integration once. Preserve all per-action approvals and return independent results for the bundle's target processing. Never read the manifest or infer repositories.
+Accept a bounded `dev-setup-bundle` handoff containing the manifest digest and union of selected global components. Do not add `aquarium-status` or any other infrastructure runtime. Prepare each global component at most once. For Ouroboros, prepare the CLI once and the Grok skill and MCP integration once. Preserve all per-action approvals and return independent results for the bundle's target processing. Never read the manifest or infer repositories.
 
 ## Report
 
-Report every selected component as current, missing, incompatible, different, duplicated, unsafe, or freshness-unverifiable; include resolved versions and sources, exact canonical targets, actions and exit status, backup and restoration evidence, cleanup, restart requirements, and remaining gaps. State explicitly that no repository configuration, staging, commit, or publication was performed.
+Report every selected component as current, missing, incompatible, different, duplicated, unsafe, or freshness-unverifiable; include resolved versions and sources, exact canonical targets, actions and exit status, backup and restoration evidence, cleanup, restart requirements, and remaining gaps. State explicitly that no repository configuration, staging, commit, publication, or production-status ledger write was performed.
