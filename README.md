@@ -4,7 +4,7 @@ Aquarium development skills packaged as a Grok plugin marketplace. This reposito
 
 English · [한국어](README.ko.md)
 
-By [Root Kernel](https://home.rootkernel.xyz) · Support: [cs@rootkernel.xyz](mailto:cs@rootkernel.xyz)
+By [Root Kernel](https://rootkernel.xyz) · Support: [cs@rootkernel.xyz](mailto:cs@rootkernel.xyz)
 
 ## Aquarium Editions
 
